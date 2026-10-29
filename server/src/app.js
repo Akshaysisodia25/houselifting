@@ -82,6 +82,11 @@ const handleHealth = async (req, res) => {
       configured: dbHealth.configured,
       connected: dbHealth.connected,
       provider: 'postgresql',
+      hostType: dbHealth.meta?.hostType || 'unknown',
+      isPooled: dbHealth.meta?.isPooled || false,
+      hasSsl: dbHealth.meta?.hasSsl || false,
+      protocol: dbHealth.meta?.protocol || 'unknown',
+      errorCode: dbHealth.errorCode || null,
       error: dbHealth.error
     },
     envStatus: {
