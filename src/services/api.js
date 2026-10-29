@@ -7,11 +7,22 @@ import {
 } from '../data/companyData';
 
 const rawApiUrl = import.meta.env.VITE_API_URL;
-// In production, default to same-origin '/api' so it works on all mobile & desktop devices without calling localhost.
-// In local development, fall back to localhost:5001/api if VITE_API_URL is not provided.
-const API_BASE_URL = rawApiUrl
-  ? rawApiUrl.replace(/\/+$/, '')
-  : (import.meta.env.DEV ? 'http://localhost:5001/api' : '/api');
+
+export function getApiBaseUrl() {
+  if (rawApiUrl) return rawApiUrl.replace(/\/+$/, '');
+  
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // When running locally from Mac browser, connect to local backend on port 5001
+    if (isLocalhost) {
+      return 'http://localhost:5001/api';
+    }
+  }
+  
+  // When running on production deployments (Vercel, custom domain, mobile), use same-origin /api
+  return '/api';
+}
+
 const TOKEN_KEY = 'tdbd_admin_token';
 
 // Auth Token Helpers
@@ -61,7 +72,8 @@ async function request(endpoint, options = {}) {
   };
 
   try {
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    const baseUrl = getApiBaseUrl();
+    const res = await fetch(`${baseUrl}${endpoint}`, config);
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
