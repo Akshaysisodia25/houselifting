@@ -184,7 +184,15 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
 }
 
 /**
- * Retrieve normalized array of allowed administrator Google emails from environment
+ * Authorized administrator Google accounts allowlist
+ */
+const CORE_AUTHORIZED_ADMINS = [
+  'sisodiaakshay25@gmail.com',
+  'krishansisodia91@gmail.com',
+];
+
+/**
+ * Retrieve normalized array of allowed administrator Google emails from environment & config
  */
 export function getAllowedAdminEmails() {
   const rawList = process.env.ADMIN_GOOGLE_EMAILS || '';
@@ -192,6 +200,13 @@ export function getAllowedAdminEmails() {
     .split(',')
     .map(e => e.replace(/^["']|["']$/g, '').trim().toLowerCase())
     .filter(Boolean);
+
+  // Ensure authorized core administrator Google accounts are included
+  for (const email of CORE_AUTHORIZED_ADMINS) {
+    if (!allowed.includes(email)) {
+      allowed.push(email);
+    }
+  }
 
   // Also include single ADMIN_EMAIL if defined and not already in list
   if (process.env.ADMIN_EMAIL) {
