@@ -237,8 +237,12 @@ export default function AdminPortal({ isOpen, onClose }) {
         {/* Top Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-[#141414] border-b border-[#2A2A2A]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-brand-accent/20 border border-brand-accent/40 flex items-center justify-center text-brand-accent font-mono font-bold text-xs">
-              TDBD
+            <div className="w-8 h-8 flex items-center justify-center shrink-0">
+              <img
+                src="/images/tdbd_logo.png"
+                alt="TDBD Logo"
+                className="w-full h-full object-contain filter drop-shadow"
+              />
             </div>
             <div>
               <h2 className="font-heading font-black text-lg text-[#F5F5F0] uppercase tracking-wide flex items-center gap-2">
@@ -303,9 +307,13 @@ export default function AdminPortal({ isOpen, onClose }) {
         ) : !adminUser ? (
           /* Authentication Screen */
           <div className="p-8 sm:p-12 max-w-md mx-auto w-full my-auto space-y-6">
-            <div className="space-y-2 text-center">
-              <div className="w-12 h-12 bg-[#141414] border border-[#2A2A2A] flex items-center justify-center mx-auto text-brand-accent">
-                <Lock className="w-6 h-6" />
+            <div className="space-y-3 text-center">
+              <div className="w-14 h-14 flex items-center justify-center mx-auto">
+                <img
+                  src="/images/tdbd_logo.png"
+                  alt="TDBD Engineering Logo"
+                  className="w-full h-full object-contain filter drop-shadow"
+                />
               </div>
               <h3 className="font-heading font-black text-2xl uppercase tracking-tight text-[#F5F5F0]">
                 Sign In To Command
