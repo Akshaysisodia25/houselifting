@@ -27,3 +27,4 @@ export const cookieParser = (req, res, next) => {
 };
 
 export default cookieParser;
+

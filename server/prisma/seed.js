@@ -487,20 +487,7 @@ async function main() {
   }
   console.log(`[SEED] ${faqs.length} FAQs created.`);
 
-  // 7. Seed Sample Enquiry
-  const sampleEnquiry = await prisma.enquiry.create({
-    data: {
-      name: 'Ramesh Verma',
-      phone: '+91 98765 43210',
-      email: 'ramesh.verma@example.com',
-      city: 'Yamunanagar, Haryana',
-      service: 'House Lifting',
-      message: 'Need to elevate 2-storey house by 3.5 feet because highway level was raised recently.',
-      status: 'NEW',
-    },
-  });
-  console.log(`[SEED] Sample enquiry created (ID: ${sampleEnquiry.id}).`);
-
+  // 7. Note: Real enquiries are created exclusively by customer submissions; no sample enquiries are seeded.
   console.log('--- Database Seed Completed Successfully ---');
 }
 

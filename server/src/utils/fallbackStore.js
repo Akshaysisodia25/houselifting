@@ -453,19 +453,6 @@ export const fallbackStore = {
       published: true
     }
   ],
-  enquiries: [
-    {
-      id: 1,
-      name: 'Rameshwar Dayal',
-      phone: '+91 98123 45678',
-      email: 'rameshwar.d@gmail.com',
-      city: 'Yamunanagar, Haryana',
-      service: 'House Lifting',
-      message: 'Need to lift 2400 sq ft double storey house by 4 feet due to road raising. Urgent survey required.',
-      status: 'NEW',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ]
+  enquiries: []
 };
 

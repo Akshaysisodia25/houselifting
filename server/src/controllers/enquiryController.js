@@ -51,9 +51,15 @@ export const createEnquiry = async (req, res, next) => {
         data: enquiry
       });
     } catch (dbErr) {
-      console.warn('Prisma DB error in createEnquiry, saving to fallbackStore:', dbErr.message);
+      console.error('Prisma DB error in createEnquiry:', dbErr.message);
+      if (process.env.DATABASE_URL) {
+        return res.status(500).json({
+          success: false,
+          message: 'Database persistence error while recording enquiry. Please try again.'
+        });
+      }
       const newEnquiry = {
-        id: fallbackStore.enquiries.length + 1,
+        id: Date.now(),
         name: name.trim(),
         phone: phone.trim(),
         email: email && email.trim() ? email.trim() : null,
@@ -108,7 +114,14 @@ export const getEnquiries = async (req, res, next) => {
         data: enquiries
       });
     } catch (dbErr) {
-      console.warn('Prisma DB error in getEnquiries, using fallbackStore:', dbErr.message);
+      console.error('Prisma DB error in getEnquiries:', dbErr.message);
+      if (process.env.DATABASE_URL) {
+        return res.status(500).json({
+          success: false,
+          message: 'Database error retrieving enquiries.',
+          data: []
+        });
+      }
       let list = [...fallbackStore.enquiries];
       if (status && VALID_STATUSES.includes(status.toUpperCase())) {
         list = list.filter(e => e.status === status.toUpperCase());
@@ -185,7 +198,10 @@ export const updateEnquiry = async (req, res, next) => {
         return res.json({ success: true, message: 'Enquiry updated successfully', data: updated });
       }
     } catch (dbErr) {
-      console.warn('Prisma updateEnquiry error, using fallbackStore:', dbErr.message);
+      console.error('Prisma updateEnquiry error:', dbErr.message);
+      if (process.env.DATABASE_URL) {
+        return res.status(500).json({ success: false, message: 'Failed to update enquiry in database' });
+      }
     }
 
     const index = fallbackStore.enquiries.findIndex(e => e.id === id);
@@ -218,7 +234,10 @@ export const deleteEnquiry = async (req, res, next) => {
         return res.json({ success: true, message: 'Enquiry deleted successfully' });
       }
     } catch (dbErr) {
-      console.warn('Prisma deleteEnquiry error, using fallbackStore:', dbErr.message);
+      console.error('Prisma deleteEnquiry error:', dbErr.message);
+      if (process.env.DATABASE_URL) {
+        return res.status(500).json({ success: false, message: 'Failed to delete enquiry from database' });
+      }
     }
 
     const index = fallbackStore.enquiries.findIndex(e => e.id === id);

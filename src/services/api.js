@@ -243,25 +243,10 @@ export async function fetchFaqs(category) {
 }
 
 export async function submitEnquiry(enquiryData) {
-  try {
-    const res = await request('/enquiries', {
-      method: 'POST',
-      body: JSON.stringify(enquiryData)
-    });
-    return res;
-  } catch (err) {
-    // If backend is completely offline or returns error, provide actionable fallback
-    console.warn('API submission failed, falling back to local confirmation:', err.message);
-    return {
-      success: true,
-      message: 'Enquiry received. Our engineering dispatch will connect with you within 24 hours.',
-      data: {
-        ...enquiryData,
-        id: Date.now(),
-        createdAt: new Date().toISOString()
-      }
-    };
-  }
+  return await request('/enquiries', {
+    method: 'POST',
+    body: JSON.stringify(enquiryData)
+  });
 }
 
 // ==========================================

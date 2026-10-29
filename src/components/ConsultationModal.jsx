@@ -18,6 +18,7 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
   });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     if (initialData) {
@@ -35,6 +36,7 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
       return;
     }
     setSubmitting(true);
+    setErrorMsg('');
     try {
       await submitEnquiry({
         name: formData.name,
@@ -47,7 +49,7 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
       setSubmitted(true);
     } catch (err) {
       console.error('Submission error:', err);
-      setSubmitted(true);
+      setErrorMsg(err.message || 'Submission could not be completed. Please try again or call our hotline.');
     } finally {
       setSubmitting(false);
     }
@@ -112,6 +114,11 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {errorMsg && (
+              <div className="p-3 bg-red-950/50 border border-red-800 text-red-200 text-xs font-mono">
+                {errorMsg}
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-[#A0A0A0]">
                 Your Name *

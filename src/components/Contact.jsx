@@ -44,8 +44,7 @@ export default function Contact({ initialData }) {
       setFormSubmitted(true);
     } catch (err) {
       console.error('Submission error:', err);
-      // Still show successful receipt because customer enquiry is stored or captured
-      setFormSubmitted(true);
+      setErrorMsg(err.message || 'Submission could not be completed. Please try again or call our engineering hotline.');
     } finally {
       setSubmitting(false);
     }

@@ -207,3 +207,4 @@ export function isEmailAuthorized(email) {
 
   return allowedEmails.includes(cleanEmail);
 }
+
