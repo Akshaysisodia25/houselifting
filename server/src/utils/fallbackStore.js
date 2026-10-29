@@ -1,14 +1,14 @@
 import bcrypt from 'bcryptjs';
 
-const defaultAdminPassword = process.env.ADMIN_PASSWORD || 'tdbd_secure_admin_2026';
-const defaultAdminHash = bcrypt.hashSync(defaultAdminPassword, 10);
+const adminPassword = process.env.ADMIN_PASSWORD || '';
+const adminPasswordHash = adminPassword ? bcrypt.hashSync(adminPassword, 10) : '';
 
 export const fallbackStore = {
   admin: {
     id: 1,
-    name: process.env.ADMIN_NAME || 'Chief Engineer Sushil Sisodia',
-    email: process.env.ADMIN_EMAIL || 'admin@houselifting.in',
-    passwordHash: defaultAdminHash,
+    name: process.env.ADMIN_NAME || 'Administrator',
+    email: process.env.ADMIN_EMAIL || '',
+    passwordHash: adminPasswordHash,
     role: 'SUPERADMIN',
     createdAt: new Date().toISOString()
   },

@@ -21,15 +21,15 @@ export const login = async (req, res, next) => {
       });
     } catch (dbErr) {
       console.warn('Prisma DB query failed in authController, checking fallbackStore:', dbErr.message);
-      if (fallbackStore.admin.email.toLowerCase() === email.toLowerCase().trim()) {
+      if (fallbackStore.admin.email && fallbackStore.admin.email.toLowerCase() === email.toLowerCase().trim()) {
         admin = fallbackStore.admin;
       }
     }
 
-    if (!admin) {
+    if (!admin || !admin.passwordHash) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password credentials',
+        message: 'Invalid email or password.',
       });
     }
 
@@ -37,7 +37,7 @@ export const login = async (req, res, next) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password credentials',
+        message: 'Invalid email or password.',
       });
     }
 

@@ -10,9 +10,13 @@ async function main() {
   console.log('--- Starting TDBD Engineering Database Seed ---');
 
   // 1. Seed Administrator
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@houselifting.in';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'tdbd_secure_admin_2026';
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
   const adminName = process.env.ADMIN_NAME || 'Chief Engineer Sushil Sisodia';
+
+  if (!adminEmail || !adminPassword) {
+    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD must be defined in server/.env for admin seeding');
+  }
 
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 

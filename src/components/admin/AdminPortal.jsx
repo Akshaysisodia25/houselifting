@@ -14,8 +14,8 @@ export default function AdminPortal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('enquiries'); // 'enquiries', 'projects', 'services', 'gallery', 'testimonials', 'faqs', 'system'
 
   // Auth form state
-  const [loginEmail, setLoginEmail] = useState('admin@houselifting.in');
-  const [loginPassword, setLoginPassword] = useState('tdbd_secure_admin_2026');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -93,10 +93,13 @@ export default function AdminPortal({ isOpen, onClose }) {
       if (res?.data?.token) {
         setToken(res.data.token);
         setAdminUser(res.data.admin);
+        setLoginPassword('');
         loadAllData();
+      } else {
+        setAuthError('Invalid email or password.');
       }
     } catch (err) {
-      setAuthError(err.message || 'Login failed. Please check your credentials.');
+      setAuthError('Invalid email or password.');
     } finally {
       setAuthLoading(false);
     }
@@ -241,7 +244,8 @@ export default function AdminPortal({ isOpen, onClose }) {
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 bg-[#141414] border border-[#2A2A2A] text-[#F5F5F0] text-sm focus:border-brand-accent focus:outline-none"
-                    placeholder="admin@houselifting.in"
+                    placeholder="Enter admin email"
+                    autoComplete="username"
                   />
                 </div>
               </div>
@@ -258,7 +262,8 @@ export default function AdminPortal({ isOpen, onClose }) {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2.5 bg-[#141414] border border-[#2A2A2A] text-[#F5F5F0] text-sm focus:border-brand-accent focus:outline-none"
-                    placeholder="••••••••••••"
+                    placeholder="Enter password"
+                    autoComplete="current-password"
                   />
                 </div>
               </div>
@@ -278,12 +283,6 @@ export default function AdminPortal({ isOpen, onClose }) {
                 )}
               </button>
             </form>
-
-            <div className="p-3 bg-[#111111] border border-[#222222] text-[11px] font-mono text-[#777777] space-y-1">
-              <div>Default Seed Credentials:</div>
-              <div className="text-[#AAAAAA]">Email: <span className="text-[#F5F5F0]">admin@houselifting.in</span></div>
-              <div className="text-[#AAAAAA]">Password: <span className="text-[#F5F5F0]">tdbd_secure_admin_2026</span></div>
-            </div>
           </div>
         ) : (
           /* Authenticated Dashboard */
