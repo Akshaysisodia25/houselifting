@@ -73,6 +73,12 @@ const handleHealth = (req, res) => {
   res.status(200).json({
     success: true,
     message: 'TDBD Engineering Works API is operational',
+    envStatus: {
+      hasAdminEmail: Boolean(process.env.ADMIN_EMAIL),
+      hasAdminPassword: Boolean(process.env.ADMIN_PASSWORD),
+      hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+      hasJwtSecret: Boolean(process.env.JWT_SECRET)
+    },
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   });

@@ -2,12 +2,15 @@ import bcrypt from 'bcryptjs';
 
 export const fallbackStore = {
   get admin() {
-    const adminPassword = process.env.ADMIN_PASSWORD || '';
-    const adminPasswordHash = adminPassword ? bcrypt.hashSync(adminPassword, 10) : '';
+    const rawEmail = process.env.ADMIN_EMAIL || '';
+    const cleanEmail = rawEmail.replace(/^["']|["']$/g, '').trim();
+    const rawPassword = process.env.ADMIN_PASSWORD || '';
+    const cleanPassword = rawPassword.replace(/^["']|["']$/g, '').trim();
+    const adminPasswordHash = cleanPassword ? bcrypt.hashSync(cleanPassword, 10) : '';
     return {
       id: 1,
-      name: process.env.ADMIN_NAME || 'Administrator',
-      email: process.env.ADMIN_EMAIL || '',
+      name: (process.env.ADMIN_NAME || 'Administrator').replace(/^["']|["']$/g, '').trim(),
+      email: cleanEmail,
       passwordHash: adminPasswordHash,
       role: 'SUPERADMIN',
       createdAt: new Date().toISOString()

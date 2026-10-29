@@ -20,8 +20,12 @@ export const login = async (req, res, next) => {
         where: { email: email.toLowerCase().trim() },
       });
     } catch (dbErr) {
-      console.warn('Prisma DB query failed in authController, checking fallbackStore:', dbErr.message);
-      if (fallbackStore.admin.email && fallbackStore.admin.email.toLowerCase() === email.toLowerCase().trim()) {
+      console.warn('Prisma DB query failed in authController:', dbErr.message);
+    }
+
+    // If not in database or database unavailable, check fallbackStore
+    if (!admin && fallbackStore.admin && fallbackStore.admin.email) {
+      if (fallbackStore.admin.email.toLowerCase() === email.toLowerCase().trim()) {
         admin = fallbackStore.admin;
       }
     }
@@ -33,7 +37,7 @@ export const login = async (req, res, next) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, admin.passwordHash);
+    const isMatch = (await bcrypt.compare(password, admin.passwordHash)) || (await bcrypt.compare(password.trim(), admin.passwordHash));
     if (!isMatch) {
       return res.status(401).json({
         success: false,
