@@ -72,9 +72,8 @@ export default function AdminPortal({ isOpen, onClose }) {
       setTestimonials(testData?.data || (Array.isArray(testData) ? testData : []));
       setFaqs(faqData?.data || (Array.isArray(faqData) ? faqData : []));
 
-      // Fetch health check
-      fetch('http://localhost:5001/api/health')
-        .then(r => r.json())
+      // Fetch health check via centralized API client (same-origin /api/health in production)
+      api.checkHealth()
         .then(d => setSystemHealth(d))
         .catch(() => setSystemHealth({ success: true, message: 'API Fallback Mode' }));
     } catch (err) {

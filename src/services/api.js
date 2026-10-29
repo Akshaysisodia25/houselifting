@@ -6,7 +6,12 @@ import {
   faqs as fallbackFaqs
 } from '../data/companyData';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+// In production, default to same-origin '/api' so it works on all mobile & desktop devices without calling localhost.
+// In local development, fall back to localhost:5001/api if VITE_API_URL is not provided.
+const API_BASE_URL = rawApiUrl
+  ? rawApiUrl.replace(/\/+$/, '')
+  : (import.meta.env.DEV ? 'http://localhost:5001/api' : '/api');
 const TOKEN_KEY = 'tdbd_admin_token';
 
 // Auth Token Helpers
@@ -77,6 +82,14 @@ async function request(endpoint, options = {}) {
 // ==========================================
 // PUBLIC API METHODS (WITH RESILIENT FALLBACK)
 // ==========================================
+
+export async function checkHealth() {
+  try {
+    return await request('/health');
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
 
 export async function fetchProjects(params = {}) {
   try {
@@ -351,6 +364,7 @@ export async function deleteFaq(id) {
 }
 
 export default {
+  checkHealth,
   fetchProjects,
   fetchProject,
   fetchServices,

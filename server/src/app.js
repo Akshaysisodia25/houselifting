@@ -23,6 +23,9 @@ app.use(helmet());
 // Cross-Origin Resource Sharing
 const clientUrl = process.env.CLIENT_URL || '*';
 const allowedOrigins = [
+  'https://houselifting.vercel.app',
+  'https://www.houselifting.in',
+  'https://houselifting.in',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
@@ -37,9 +40,10 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // allow requests with no origin (like mobile apps, curl, or same-origin)
-      if (!origin || allowedOrigins.includes(origin) || clientUrl === '*') {
-        return callback(null, true);
-      }
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (origin.endsWith('.vercel.app')) return callback(null, true);
+      if (clientUrl === '*') return callback(null, true);
       return callback(null, true); // Permissive for preview/staging environments
     },
     credentials: true,
@@ -67,14 +71,17 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health Check Endpoint
-app.get('/api/health', (req, res) => {
+const handleHealth = (req, res) => {
   res.status(200).json({
     success: true,
     message: 'TDBD Engineering Works API is operational',
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   });
-});
+};
+
+app.get('/api/health', handleHealth);
+app.get('/health', handleHealth);
 
 // Root friendly endpoint
 app.get('/', (req, res) => {
@@ -86,14 +93,27 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes
+// API Routes (mounted under both /api/... and direct /... for seamless Vercel serverless routing)
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
 app.use('/api/projects', projectRoutes);
+app.use('/projects', projectRoutes);
+
 app.use('/api/services', serviceRoutes);
+app.use('/services', serviceRoutes);
+
 app.use('/api/gallery', galleryRoutes);
+app.use('/gallery', galleryRoutes);
+
 app.use('/api/testimonials', testimonialRoutes);
+app.use('/testimonials', testimonialRoutes);
+
 app.use('/api/faqs', faqRoutes);
+app.use('/faqs', faqRoutes);
+
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/enquiries', enquiryRoutes);
 
 // Catch 404 & forward to error handler
 app.use(notFound);
