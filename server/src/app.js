@@ -13,6 +13,7 @@ import testimonialRoutes from './routes/testimonialRoutes.js';
 import faqRoutes from './routes/faqRoutes.js';
 import enquiryRoutes from './routes/enquiryRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
+import { testDatabaseConnection } from './utils/prisma.js';
 
 const app = express();
 
@@ -70,15 +71,25 @@ app.use(cookieParser);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health Check Endpoint
-const handleHealth = (req, res) => {
+// Health Check Endpoint with non-destructive SELECT 1 database connectivity check
+const handleHealth = async (req, res) => {
+  const dbHealth = await testDatabaseConnection();
+
   res.status(200).json({
     success: true,
     message: 'TDBD Engineering Works API is operational',
+    database: {
+      configured: dbHealth.configured,
+      connected: dbHealth.connected,
+      provider: 'postgresql',
+      error: dbHealth.error
+    },
     envStatus: {
       hasAdminEmail: Boolean(process.env.ADMIN_EMAIL),
       hasAdminPassword: Boolean(process.env.ADMIN_PASSWORD),
       hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+      hasPostgresPrismaUrl: Boolean(process.env.POSTGRES_PRISMA_URL),
+      hasPostgresUrl: Boolean(process.env.POSTGRES_URL),
       hasJwtSecret: Boolean(process.env.JWT_SECRET),
       hasGoogleClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
       hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
