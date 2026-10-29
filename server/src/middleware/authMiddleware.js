@@ -71,21 +71,13 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
-    // 3. Resolve Admin user profile from Prisma PostgreSQL
+    // 3. Resolve Admin user profile from Prisma PostgreSQL by verified email
     let admin = null;
     try {
-      if (decoded.id && !isNaN(parseInt(decoded.id, 10))) {
-        admin = await prisma.admin.findUnique({
-          where: { id: parseInt(decoded.id, 10) },
-          select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
-        });
-      }
-      if (!admin && normalizedEmail) {
-        admin = await prisma.admin.findUnique({
-          where: { email: normalizedEmail },
-          select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
-        });
-      }
+      admin = await prisma.admin.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
+      });
     } catch (dbErr) {
       console.warn('Prisma Admin lookup warning:', dbErr.message);
     }
