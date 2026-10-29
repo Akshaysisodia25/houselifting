@@ -39,22 +39,26 @@ export default function AdminPortal({ isOpen, onClose }) {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     const authErrorParam = params.get('error');
-    const authEmailParam = params.get('email');
 
     if (authErrorParam) {
-      if (authErrorParam === 'unauthorized_email') {
-        setAuthError(`Access Denied: Google account "${authEmailParam || ''}" is not authorized. Only allowlisted company administrators can access this portal.`);
+      if (authErrorParam === 'unauthorized_email' || authErrorParam === 'access_denied') {
+        setAuthError('Access Denied: Your Google account is not on the authorized administrator allowlist. Access to the Engineering Operations Portal is restricted.');
       } else if (authErrorParam === 'invalid_state') {
         setAuthError('Authentication security verification failed (invalid OAuth state). Please try again.');
       } else if (authErrorParam === 'missing_code_verifier') {
         setAuthError('OAuth session expired. Please attempt Google Sign-In again.');
-      } else if (authErrorParam === 'access_denied') {
-        setAuthError('Google Sign-In was cancelled or access permissions were denied.');
       } else {
         setAuthError(`Authentication error: ${decodeURIComponent(authErrorParam)}`);
       }
+
+      // CRITICAL: Explicitly clear any existing admin session state and stored tokens
+      setAdminUser(null);
+      api.removeAuthToken();
+      setCheckingAuth(false);
+
       const cleanUrl = window.location.pathname + window.location.hash;
       window.history.replaceState({}, document.title, cleanUrl);
+      return; // STOP EXECUTION: Do not query admin profile when OAuth explicitly failed
     } else if (authStatus === 'success') {
       const cleanUrl = window.location.pathname + window.location.hash;
       window.history.replaceState({}, document.title, cleanUrl);
@@ -68,10 +72,15 @@ export default function AdminPortal({ isOpen, onClose }) {
           loadAllData();
         } else {
           setAdminUser(null);
+          api.removeAuthToken();
         }
       })
-      .catch(() => {
+      .catch((err) => {
         setAdminUser(null);
+        api.removeAuthToken();
+        if (err.status === 403) {
+          setAuthError('Access Denied: Your Google account is not on the authorized engineering administrator allowlist.');
+        }
       })
       .finally(() => {
         setCheckingAuth(false);
@@ -161,12 +170,14 @@ export default function AdminPortal({ isOpen, onClose }) {
   const handleGoogleSignIn = () => {
     setAuthLoading(true);
     setAuthError('');
+    api.removeAuthToken();
     api.loginWithGoogle();
   };
 
   const handleLogout = async () => {
     await api.logoutAdmin();
     setAdminUser(null);
+    setAuthError('');
   };
 
   const handleStatusChange = async (enquiryId, newStatus) => {

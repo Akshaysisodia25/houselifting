@@ -1,9 +1,18 @@
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma.js';
-import { fallbackStore } from '../utils/fallbackStore.js';
 import { isEmailAuthorized } from '../utils/googleAuth.js';
 
 export const requireAuth = async (req, res, next) => {
+  const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
+  const clearSessionCookie = () => {
+    res.clearCookie('tdbd_admin_session', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+    });
+  };
+
   try {
     // 1. Extract session token: prioritize secure HttpOnly cookie, fallback to Authorization header
     let token = req.cookies?.tdbd_admin_session;
@@ -28,6 +37,7 @@ export const requireAuth = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, secret);
     } catch (jwtErr) {
+      clearSessionCookie();
       if (jwtErr.name === 'TokenExpiredError') {
         return res.status(401).json({
           success: false,
@@ -40,22 +50,28 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
-    if (!decoded || (!decoded.id && !decoded.email)) {
+    // Every valid administrator session MUST have a verified email
+    if (!decoded || !decoded.email || typeof decoded.email !== 'string') {
+      clearSessionCookie();
       return res.status(401).json({
         success: false,
-        message: 'Malformed session credentials.',
+        message: 'Malformed session credentials: Email claim missing or invalid.',
       });
     }
 
-    // 2. Server-side allowlist check (403 Forbidden if not authorized)
-    if (decoded.email && !isEmailAuthorized(decoded.email)) {
+    // Normalize email to lowercase and trim whitespace
+    const normalizedEmail = decoded.email.replace(/^["']|["']$/g, '').toLowerCase().trim();
+
+    // 2. STRICT Server-side allowlist check (403 Forbidden if not authorized)
+    if (!isEmailAuthorized(normalizedEmail)) {
+      clearSessionCookie();
       return res.status(403).json({
         success: false,
         message: 'Forbidden: This Google account is not on the authorized engineering administrator allowlist.',
       });
     }
 
-    // 3. Resolve Admin user profile from Prisma or Fallback
+    // 3. Resolve Admin user profile from Prisma PostgreSQL
     let admin = null;
     try {
       if (decoded.id && !isNaN(parseInt(decoded.id, 10))) {
@@ -64,9 +80,9 @@ export const requireAuth = async (req, res, next) => {
           select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
         });
       }
-      if (!admin && decoded.email) {
+      if (!admin && normalizedEmail) {
         admin = await prisma.admin.findUnique({
-          where: { email: decoded.email.toLowerCase().trim() },
+          where: { email: normalizedEmail },
           select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
         });
       }
@@ -75,11 +91,10 @@ export const requireAuth = async (req, res, next) => {
     }
 
     if (!admin) {
-      // In-memory fallback if database is not available
       admin = {
         id: decoded.id || 1,
         name: decoded.name || 'Administrator',
-        email: decoded.email || fallbackStore.admin.email,
+        email: normalizedEmail,
         googleId: decoded.googleId || null,
         picture: decoded.picture || null,
         role: decoded.role || 'SUPERADMIN',
@@ -87,8 +102,9 @@ export const requireAuth = async (req, res, next) => {
       };
     }
 
-    // Verify role permissions
+    // 4. Verify role permissions
     if (admin.role !== 'ADMIN' && admin.role !== 'SUPERADMIN') {
+      clearSessionCookie();
       return res.status(403).json({
         success: false,
         message: 'Forbidden: Insufficient administrator privileges.',
@@ -98,7 +114,7 @@ export const requireAuth = async (req, res, next) => {
     req.admin = admin;
     next();
   } catch (error) {
-    console.error('requireAuth unexpected error:', error);
+    console.error('requireAuth unexpected error:', error.message || error);
     return res.status(500).json({
       success: false,
       message: 'Internal authorization error.',

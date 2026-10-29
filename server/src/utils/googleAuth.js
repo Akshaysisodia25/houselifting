@@ -184,25 +184,37 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
 }
 
 /**
+ * Retrieve normalized array of allowed administrator Google emails from environment
+ */
+export function getAllowedAdminEmails() {
+  const rawList = process.env.ADMIN_GOOGLE_EMAILS || '';
+  const allowed = rawList
+    .split(',')
+    .map(e => e.replace(/^["']|["']$/g, '').trim().toLowerCase())
+    .filter(Boolean);
+
+  // Also include single ADMIN_EMAIL if defined and not already in list
+  if (process.env.ADMIN_EMAIL) {
+    const defaultEmail = process.env.ADMIN_EMAIL.replace(/^["']|["']$/g, '').trim().toLowerCase();
+    if (defaultEmail && !allowed.includes(defaultEmail)) {
+      allowed.push(defaultEmail);
+    }
+  }
+
+  return allowed;
+}
+
+/**
  * Check if the email address is on the authorized administrator allowlist
  */
 export function isEmailAuthorized(email) {
-  if (!email) return false;
-  const cleanEmail = email.toLowerCase().trim();
+  if (!email || typeof email !== 'string') return false;
+  const cleanEmail = email.replace(/^["']|["']$/g, '').toLowerCase().trim();
+  if (!cleanEmail) return false;
 
-  // Allowlist from ADMIN_GOOGLE_EMAILS (comma-separated list)
-  const rawList = process.env.ADMIN_GOOGLE_EMAILS || '';
-  const allowedEmails = rawList
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean);
-
-  // Also include single ADMIN_EMAIL if defined
-  if (process.env.ADMIN_EMAIL) {
-    const defaultEmail = process.env.ADMIN_EMAIL.replace(/^["']|["']$/g, '').trim().toLowerCase();
-    if (defaultEmail && !allowedEmails.includes(defaultEmail)) {
-      allowedEmails.push(defaultEmail);
-    }
+  const allowedEmails = getAllowedAdminEmails();
+  if (allowedEmails.length === 0) {
+    return false;
   }
 
   return allowedEmails.includes(cleanEmail);

@@ -14,6 +14,8 @@ import faqRoutes from './routes/faqRoutes.js';
 import enquiryRoutes from './routes/enquiryRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import { testDatabaseConnection } from './utils/prisma.js';
+import { getAllowedAdminEmails } from './utils/googleAuth.js';
+import crypto from 'crypto';
 
 const app = express();
 
@@ -74,6 +76,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Health Check Endpoint with non-destructive SELECT 1 database connectivity check
 const handleHealth = async (req, res) => {
   const dbHealth = await testDatabaseConnection();
+  const allowedEmails = getAllowedAdminEmails();
+  const allowlistFingerprints = allowedEmails.map(e =>
+    crypto.createHash('sha256').update(e).digest('hex').substring(0, 8)
+  );
 
   res.status(200).json({
     success: true,
@@ -88,6 +94,11 @@ const handleHealth = async (req, res) => {
       protocol: dbHealth.meta?.protocol || 'unknown',
       errorCode: dbHealth.errorCode || null,
       error: dbHealth.error
+    },
+    adminAuth: {
+      allowlistConfigured: Boolean(process.env.ADMIN_GOOGLE_EMAILS),
+      allowedCount: allowedEmails.length,
+      fingerprints: allowlistFingerprints
     },
     envStatus: {
       hasAdminEmail: Boolean(process.env.ADMIN_EMAIL),

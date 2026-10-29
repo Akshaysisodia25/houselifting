@@ -111,10 +111,30 @@ export const handleGoogleCallback = async (req, res, next) => {
       accessToken: tokenResponse.access_token,
     });
 
+    const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
+
     // 3. Server-side allowlist authorization check (HTTP 403 on failure)
     if (!isEmailAuthorized(googleUser.email)) {
-      console.warn(`[SECURITY] Unauthorized Google login attempt: ${googleUser.email}`);
-      return res.redirect(`${returnTo}/#admin?error=unauthorized_email&email=${encodeURIComponent(googleUser.email)}`);
+      console.warn('[SECURITY] Unauthorized Google login attempt denied by server-side allowlist');
+
+      // CRITICAL: Immediately clear any active admin session cookies to prevent privilege persistence
+      res.clearCookie('tdbd_admin_session', {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: 'lax',
+        path: '/',
+      });
+
+      // If client requests JSON or direct API verification
+      if (req.headers.accept?.includes('application/json')) {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access denied: Google account is not on the authorized engineering administrator allowlist.',
+        });
+      }
+
+      // Redirect to Admin Portal with access_denied flag (do not leak email in URL or logs)
+      return res.redirect(`${returnTo}/#admin?error=unauthorized_email`);
     }
 
     // 4. Upsert Admin account in Prisma PostgreSQL (or fallback if DB disconnected)
@@ -167,7 +187,6 @@ export const handleGoogleCallback = async (req, res, next) => {
     );
 
     // 6. Set secure HttpOnly session cookie
-    const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
     res.cookie('tdbd_admin_session', sessionToken, {
       httpOnly: true,
       secure: isProd,
@@ -179,8 +198,15 @@ export const handleGoogleCallback = async (req, res, next) => {
     // 7. Redirect back to Admin Portal with success flag
     return res.redirect(`${returnTo}/#admin?auth=success`);
   } catch (error) {
-    console.error('handleGoogleCallback error:', error);
+    console.error('handleGoogleCallback error:', error.message || error);
     clearOAuthCookies();
+    const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
+    res.clearCookie('tdbd_admin_session', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+    });
     return res.redirect(`${returnTo}/#admin?error=${encodeURIComponent(error.message || 'authentication_failed')}`);
   }
 };

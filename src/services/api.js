@@ -272,6 +272,7 @@ export function getGoogleLoginUrl() {
 
 export function loginWithGoogle() {
   if (typeof window !== 'undefined') {
+    removeAuthToken();
     window.location.href = getGoogleLoginUrl();
   }
 }
