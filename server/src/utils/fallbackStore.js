@@ -1,16 +1,17 @@
 import bcrypt from 'bcryptjs';
 
-const adminPassword = process.env.ADMIN_PASSWORD || '';
-const adminPasswordHash = adminPassword ? bcrypt.hashSync(adminPassword, 10) : '';
-
 export const fallbackStore = {
-  admin: {
-    id: 1,
-    name: process.env.ADMIN_NAME || 'Administrator',
-    email: process.env.ADMIN_EMAIL || '',
-    passwordHash: adminPasswordHash,
-    role: 'SUPERADMIN',
-    createdAt: new Date().toISOString()
+  get admin() {
+    const adminPassword = process.env.ADMIN_PASSWORD || '';
+    const adminPasswordHash = adminPassword ? bcrypt.hashSync(adminPassword, 10) : '';
+    return {
+      id: 1,
+      name: process.env.ADMIN_NAME || 'Administrator',
+      email: process.env.ADMIN_EMAIL || '',
+      passwordHash: adminPasswordHash,
+      role: 'SUPERADMIN',
+      createdAt: new Date().toISOString()
+    };
   },
   services: [
     {

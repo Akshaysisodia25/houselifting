@@ -11,7 +11,9 @@
     "server:dev": "cd server && npm run dev",
     "seed": "cd server && npm run seed",
     "prisma:generate": "cd server && npm run prisma:generate",
-    "prisma:migrate": "cd server && npm run prisma:migrate"
+    "prisma:migrate": "cd server && npm run prisma:migrate",
+    "db:deploy": "prisma migrate deploy --schema=server/prisma/schema.prisma",
+    "db:seed": "node server/prisma/seed.js"
   },
   "prisma": {
     "schema": "server/prisma/schema.prisma"
