@@ -1,10 +1,22 @@
-import React, { useState } from 'react';
-import { services } from '../data/companyData';
+import React, { useState, useEffect } from 'react';
+import { services as initialServices } from '../data/companyData';
+import { fetchServices } from '../services/api';
 import ServiceModal from './ServiceModal';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 
 export default function Services({ onOpenConsultation }) {
+  const [serviceList, setServiceList] = useState(initialServices);
   const [activeModalService, setActiveModalService] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchServices().then(data => {
+      if (mounted && data && data.length > 0) {
+        setServiceList(data);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   return (
     <section id="services" className="py-24 sm:py-32 bg-[#080808] text-[#F5F5F0] relative border-b border-[#2A2A2A]">
@@ -29,7 +41,7 @@ export default function Services({ onOpenConsultation }) {
 
         {/* Large Editorial Alternating Service Rows */}
         <div className="divide-y divide-[#2A2A2A]">
-          {services.map((service, idx) => {
+          {serviceList.map((service, idx) => {
             const isEven = idx % 2 === 1;
             return (
               <div 

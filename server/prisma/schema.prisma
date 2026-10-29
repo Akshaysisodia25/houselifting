@@ -1,0 +1,122 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Admin {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("ADMIN")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admins")
+}
+
+model Project {
+  id             Int      @id @default(autoincrement())
+  title          String
+  slug           String   @unique
+  location       String
+  description    String   @db.Text
+  category       String
+  imageUrl       String
+  beforeImageUrl String?
+  afterImageUrl  String?
+  featured       Boolean  @default(false)
+  liftHeight     String?
+  problem        String?  @db.Text
+  solution       String?  @db.Text
+  specs          Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("projects")
+}
+
+model Service {
+  id               Int      @id @default(autoincrement())
+  title            String
+  slug             String   @unique
+  shortDescription String
+  description      String   @db.Text
+  imageUrl         String
+  icon             String?
+  featured         Boolean  @default(false)
+  specs            Json?
+  features         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("services")
+}
+
+model GalleryImage {
+  id          Int      @id @default(autoincrement())
+  title       String
+  imageUrl    String
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("gallery_images")
+}
+
+model Testimonial {
+  id          Int      @id @default(autoincrement())
+  name        String
+  location    String
+  content     String   @db.Text
+  rating      Int      @default(5)
+  imageUrl    String?
+  approved    Boolean  @default(true)
+  outcome     String?
+  projectType String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("testimonials")
+}
+
+model FAQ {
+  id        Int      @id @default(autoincrement())
+  question  String
+  answer    String   @db.Text
+  category  String   @default("General")
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Enquiry {
+  id        Int           @id @default(autoincrement())
+  name      String
+  phone     String
+  email     String?
+  city      String
+  service   String
+  message   String?       @db.Text
+  status    EnquiryStatus @default(NEW)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("enquiries")
+}
+

@@ -1,17 +1,29 @@
-import React, { useState } from 'react';
-import { projects } from '../data/companyData';
+import React, { useState, useEffect } from 'react';
+import { projects as initialProjects } from '../data/companyData';
+import { fetchProjects } from '../services/api';
 import ProjectModal from './ProjectModal';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 
 export default function Projects({ onOpenConsultation }) {
+  const [projectList, setProjectList] = useState(initialProjects);
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedProject, setSelectedProject] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchProjects().then(data => {
+      if (mounted && data && data.length > 0) {
+        setProjectList(data);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const filterCategories = ['All', 'House Lifting', 'Building Lifting', 'House Shifting', 'Commercial'];
 
   const filteredProjects = activeFilter === 'All' 
-    ? projects 
-    : projects.filter(p => p.category === activeFilter);
+    ? projectList 
+    : projectList.filter(p => p.category === activeFilter);
 
   return (
     <section id="projects" className="py-24 sm:py-32 bg-[#080808] text-[#F5F5F0] relative border-b border-[#2A2A2A]">

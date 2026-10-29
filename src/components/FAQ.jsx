@@ -1,9 +1,21 @@
-import React, { useState } from 'react';
-import { faqs } from '../data/companyData';
+import React, { useState, useEffect } from 'react';
+import { faqs as initialFaqs } from '../data/companyData';
+import { fetchFaqs } from '../services/api';
 import { ArrowRight } from 'lucide-react';
 
 export default function FAQ({ onOpenConsultation }) {
+  const [faqList, setFaqList] = useState(initialFaqs);
   const [openIndex, setOpenIndex] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchFaqs().then(data => {
+      if (mounted && data && data.length > 0) {
+        setFaqList(data);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const toggle = (idx) => {
     setOpenIndex(openIndex === idx ? null : idx);
@@ -32,10 +44,10 @@ export default function FAQ({ onOpenConsultation }) {
 
         {/* Accordion List with Razor-thin Dividers */}
         <div className="max-w-4xl divide-y divide-[#2A2A2A] border-b border-[#2A2A2A] py-8">
-          {faqs.map((faq, index) => {
+          {faqList.map((faq, index) => {
             const isOpen = openIndex === index;
             return (
-              <div key={index} className="py-6">
+              <div key={faq.id || index} className="py-6">
                 <button
                   onClick={() => toggle(index)}
                   className="w-full text-left flex items-start justify-between gap-6 group"

@@ -1,19 +1,31 @@
-import React, { useState } from 'react';
-import { testimonials } from '../data/companyData';
+import React, { useState, useEffect } from 'react';
+import { testimonials as initialTestimonials } from '../data/companyData';
+import { fetchTestimonials } from '../services/api';
 import { ChevronLeft, ChevronRight, Quote } from 'lucide-react';
 
 export default function Testimonials() {
+  const [list, setList] = useState(initialTestimonials);
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  useEffect(() => {
+    let mounted = true;
+    fetchTestimonials().then(data => {
+      if (mounted && data && data.length > 0) {
+        setList(data);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
   const prev = () => {
-    setCurrentIndex((prevIdx) => (prevIdx === 0 ? testimonials.length - 1 : prevIdx - 1));
+    setCurrentIndex((prevIdx) => (prevIdx === 0 ? list.length - 1 : prevIdx - 1));
   };
 
   const next = () => {
-    setCurrentIndex((prevIdx) => (prevIdx === testimonials.length - 1 ? 0 : prevIdx + 1));
+    setCurrentIndex((prevIdx) => (prevIdx === list.length - 1 ? 0 : prevIdx + 1));
   };
 
-  const active = testimonials[currentIndex];
+  const active = list[currentIndex] || list[0] || initialTestimonials[0];
 
   return (
     <section id="testimonials" className="py-24 sm:py-32 bg-[#0B0B0B] text-[#F5F5F0] relative border-b border-[#2A2A2A]">
@@ -41,27 +53,27 @@ export default function Testimonials() {
           <div className="max-w-4xl space-y-8">
             <div className="flex items-center gap-3">
               <span className="text-xs font-mono font-bold uppercase tracking-widest text-brand-accent">
-                Verification Record 0{currentIndex + 1} of 0{testimonials.length}
+                Verification Record 0{currentIndex + 1} of 0{list.length}
               </span>
               <span className="text-[#555555]">/</span>
               <span className="text-xs font-mono text-[#A0A0A0] uppercase">
-                {active.projectType}
+                {active.projectType || 'Structural Elevation'}
               </span>
             </div>
 
             <blockquote className="font-heading font-bold text-2xl sm:text-4xl md:text-5xl text-[#F5F5F0] uppercase tracking-tight leading-snug">
-              "{active.quote}"
+              "{active.quote || active.content}"
             </blockquote>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 border-t border-[#2A2A2A] text-xs font-mono uppercase tracking-wider">
               <div className="space-y-0.5">
-                <span className="text-[#F5F5F0] font-bold block">{active.author}</span>
+                <span className="text-[#F5F5F0] font-bold block">{active.author || active.name}</span>
                 <span className="text-[#A0A0A0] block">Location: {active.location}</span>
               </div>
 
               {active.outcome && (
                 <div className="px-3 py-1.5 bg-[#171717] border border-brand-accent/40 text-brand-accent font-semibold">
-                  Result: {active.outcome}
+                  {active.outcome}
                 </div>
               )}
             </div>
@@ -77,7 +89,7 @@ export default function Testimonials() {
               <ChevronLeft className="w-5 h-5" />
             </button>
             <span className="text-xs font-mono text-[#A0A0A0] px-3">
-              0{currentIndex + 1} / 0{testimonials.length}
+              0{currentIndex + 1} / 0{list.length}
             </span>
             <button
               onClick={next}

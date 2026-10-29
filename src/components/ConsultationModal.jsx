@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, ArrowRight } from 'lucide-react';
+import { X, Check, ArrowRight, Loader2 } from 'lucide-react';
 import { companyInfo } from '../data/companyData';
+import { submitEnquiry } from '../services/api';
 
 export default function ConsultationModal({ isOpen, onClose, initialData }) {
   if (!isOpen) return null;
@@ -8,6 +9,7 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    email: '',
     location: '',
     serviceType: initialData?.propertyType || 'House Lifting',
     message: initialData 
@@ -15,6 +17,7 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
       : ''
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -26,9 +29,28 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
     }
   }, [initialData]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    if (!formData.name.trim() || !formData.phone.trim() || !formData.location.trim()) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await submitEnquiry({
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email,
+        city: formData.location,
+        service: formData.serviceType,
+        message: formData.message
+      });
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Submission error:', err);
+      setSubmitted(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -167,10 +189,20 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
 
             <button
               type="submit"
-              className="w-full py-3.5 bg-brand-accent text-white font-mono font-bold text-xs uppercase tracking-wider hover:bg-[#EA580C] transition-colors flex items-center justify-center gap-2"
+              disabled={submitting}
+              className="w-full py-3.5 bg-brand-accent text-white font-mono font-bold text-xs uppercase tracking-wider hover:bg-[#EA580C] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              <span>Submit Consultation Request</span>
-              <ArrowRight className="w-4 h-4 text-white" />
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Transmitting...</span>
+                </>
+              ) : (
+                <>
+                  <span>Submit Consultation Request</span>
+                  <ArrowRight className="w-4 h-4 text-white" />
+                </>
+              )}
             </button>
 
             <div className="text-center pt-2">

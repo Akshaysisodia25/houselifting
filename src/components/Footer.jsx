@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowUp, Phone, Mail, MapPin } from 'lucide-react';
 import { companyInfo } from '../data/companyData';
 
-export default function Footer() {
+export default function Footer({ onOpenAdmin }) {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -106,8 +106,15 @@ export default function Footer() {
 
         {/* Bottom Line Bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-baseline sm:items-center justify-between text-[11px] font-mono text-[#707070] uppercase tracking-wider gap-4">
-          <div>
-            © {new Date().getFullYear()} TDBD Engineering Works Private Limited. All Rights Reserved.
+          <div className="flex flex-wrap items-center gap-4">
+            <span>© {new Date().getFullYear()} TDBD Engineering Works Private Limited. All Rights Reserved.</span>
+            <span className="text-[#333333]">/</span>
+            <button
+              onClick={onOpenAdmin}
+              className="text-[#888888] hover:text-brand-accent transition-colors flex items-center gap-1"
+            >
+              <span>Staff Portal / Admin</span>
+            </button>
           </div>
           <button
             onClick={scrollToTop}

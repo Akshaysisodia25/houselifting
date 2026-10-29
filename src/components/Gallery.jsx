@@ -1,17 +1,29 @@
-import React, { useState } from 'react';
-import { galleryImages } from '../data/companyData';
+import React, { useState, useEffect } from 'react';
+import { galleryImages as initialGallery } from '../data/companyData';
+import { fetchGallery } from '../services/api';
 import LightboxModal from './LightboxModal';
 import { ArrowUpRight } from 'lucide-react';
 
 export default function Gallery() {
+  const [imageList, setImageList] = useState(initialGallery);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeLightboxIndex, setActiveLightboxIndex] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchGallery().then(data => {
+      if (mounted && data && data.length > 0) {
+        setImageList(data);
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const categories = ['All', 'Lifting', 'Commercial', 'Equipment', 'Process', 'Safety', 'Shifting'];
 
   const filteredImages = selectedCategory === 'All'
-    ? galleryImages
-    : galleryImages.filter(img => img.category === selectedCategory);
+    ? imageList
+    : imageList.filter(img => img.category?.toLowerCase() === selectedCategory.toLowerCase());
 
   return (
     <section id="gallery" className="py-24 sm:py-32 bg-[#080808] text-[#F5F5F0] relative border-b border-[#2A2A2A]">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Problem from './components/Problem';
@@ -19,6 +19,7 @@ import CTA from './components/CTA';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import ConsultationModal from './components/ConsultationModal';
+import AdminPortal from './components/admin/AdminPortal';
 import { Phone, MessageCircle, X } from 'lucide-react';
 import { companyInfo } from './data/companyData';
 
@@ -26,6 +27,18 @@ export default function App() {
   const [isConsultationOpen, setIsConsultationOpen] = useState(false);
   const [consultationPreFill, setConsultationPreFill] = useState(null);
   const [contactMenuOpen, setContactMenuOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (window.location.hash === '#admin') {
+        setIsAdminOpen(true);
+      }
+    };
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   const handleOpenConsultation = (data = null) => {
     setConsultationPreFill(data);
@@ -59,7 +72,18 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <Footer />
+      <Footer onOpenAdmin={() => setIsAdminOpen(true)} />
+
+      {/* Admin Portal Modal */}
+      <AdminPortal
+        isOpen={isAdminOpen}
+        onClose={() => {
+          setIsAdminOpen(false);
+          if (window.location.hash === '#admin') {
+            history.pushState("", document.title, window.location.pathname + window.location.search);
+          }
+        }}
+      />
 
       {/* Single Unified Floating Contact System */}
       <aside aria-label="Direct Engineer Contact" className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40">
