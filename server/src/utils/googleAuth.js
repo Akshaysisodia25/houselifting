@@ -189,6 +189,7 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
 const CORE_AUTHORIZED_ADMINS = [
   'sisodiaakshay25@gmail.com',
   'krishansisodia91@gmail.com',
+  'sisodiaakshay536@gmail.com',
 ];
 
 /**
