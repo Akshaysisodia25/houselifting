@@ -1,8 +1,12 @@
 import prisma from '../utils/prisma.js';
-import { fallbackStore } from '../utils/fallbackStore.js';
 
 const VALID_STATUSES = ['NEW', 'CONTACTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
+/**
+ * Create a new customer enquiry
+ * POST /api/enquiries
+ * Strictly persists a new independent row in PostgreSQL. Never updates or overwrites existing records.
+ */
 export const createEnquiry = async (req, res, next) => {
   try {
     const { name, phone, email, city, service, message } = req.body;
@@ -51,31 +55,11 @@ export const createEnquiry = async (req, res, next) => {
         data: enquiry
       });
     } catch (dbErr) {
-      console.error('Prisma DB error in createEnquiry:', dbErr.message);
-      if (process.env.DATABASE_URL) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database persistence error while recording enquiry. Please try again.'
-        });
-      }
-      const newEnquiry = {
-        id: Date.now(),
-        name: name.trim(),
-        phone: phone.trim(),
-        email: email && email.trim() ? email.trim() : null,
-        city: city.trim(),
-        service: service.trim(),
-        message: message && message.trim() ? message.trim() : null,
-        status: 'NEW',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      fallbackStore.enquiries.unshift(newEnquiry);
-
-      return res.status(201).json({
-        success: true,
-        message: 'Enquiry submitted successfully. Our engineering team will contact you within 24 hours.',
-        data: newEnquiry
+      console.error('PostgreSQL error creating enquiry in prisma.enquiry.create:', dbErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Database persistence error while recording enquiry in PostgreSQL. Please check database connection.',
+        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
       });
     }
   } catch (error) {
@@ -83,26 +67,32 @@ export const createEnquiry = async (req, res, next) => {
   }
 };
 
+/**
+ * Get all enquiries from PostgreSQL
+ * GET /api/enquiries
+ * Queries PostgreSQL findMany with optional status/search filters.
+ * Returns empty array [] if zero records exist.
+ */
 export const getEnquiries = async (req, res, next) => {
   try {
     const { status, search } = req.query;
 
+    const where = {};
+
+    if (status && VALID_STATUSES.includes(status.toUpperCase())) {
+      where.status = status.toUpperCase();
+    }
+
+    if (search && search.trim()) {
+      where.OR = [
+        { name: { contains: search.trim(), mode: 'insensitive' } },
+        { phone: { contains: search.trim() } },
+        { city: { contains: search.trim(), mode: 'insensitive' } },
+        { service: { contains: search.trim(), mode: 'insensitive' } }
+      ];
+    }
+
     try {
-      const where = {};
-
-      if (status && VALID_STATUSES.includes(status.toUpperCase())) {
-        where.status = status.toUpperCase();
-      }
-
-      if (search && search.trim()) {
-        where.OR = [
-          { name: { contains: search.trim(), mode: 'insensitive' } },
-          { phone: { contains: search.trim() } },
-          { city: { contains: search.trim(), mode: 'insensitive' } },
-          { service: { contains: search.trim(), mode: 'insensitive' } }
-        ];
-      }
-
       const enquiries = await prisma.enquiry.findMany({
         where,
         orderBy: { createdAt: 'desc' }
@@ -114,31 +104,12 @@ export const getEnquiries = async (req, res, next) => {
         data: enquiries
       });
     } catch (dbErr) {
-      console.error('Prisma DB error in getEnquiries:', dbErr.message);
-      if (process.env.DATABASE_URL) {
-        return res.status(500).json({
-          success: false,
-          message: 'Database error retrieving enquiries.',
-          data: []
-        });
-      }
-      let list = [...fallbackStore.enquiries];
-      if (status && VALID_STATUSES.includes(status.toUpperCase())) {
-        list = list.filter(e => e.status === status.toUpperCase());
-      }
-      if (search && search.trim()) {
-        const s = search.trim().toLowerCase();
-        list = list.filter(e =>
-          e.name.toLowerCase().includes(s) ||
-          e.phone.includes(s) ||
-          e.city.toLowerCase().includes(s) ||
-          e.service.toLowerCase().includes(s)
-        );
-      }
-      return res.json({
-        success: true,
-        count: list.length,
-        data: list
+      console.error('PostgreSQL error fetching enquiries in prisma.enquiry.findMany:', dbErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error retrieving enquiries from PostgreSQL. Please check database connection.',
+        data: [],
+        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
       });
     }
   } catch (error) {
@@ -146,6 +117,10 @@ export const getEnquiries = async (req, res, next) => {
   }
 };
 
+/**
+ * Get single enquiry by ID
+ * GET /api/enquiries/:id
+ */
 export const getEnquiryById = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -155,21 +130,27 @@ export const getEnquiryById = async (req, res, next) => {
 
     try {
       const enquiry = await prisma.enquiry.findUnique({ where: { id } });
-      if (enquiry) return res.json({ success: true, data: enquiry });
+      if (!enquiry) {
+        return res.status(404).json({ success: false, message: 'Enquiry not found in database' });
+      }
+      return res.json({ success: true, data: enquiry });
     } catch (dbErr) {
-      console.warn('Prisma DB error in getEnquiryById, using fallbackStore:', dbErr.message);
+      console.error('PostgreSQL error in getEnquiryById:', dbErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error retrieving enquiry from PostgreSQL.',
+        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
+      });
     }
-
-    const item = fallbackStore.enquiries.find(e => e.id === id);
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'Enquiry not found' });
-    }
-    return res.json({ success: true, data: item });
   } catch (error) {
     next(error);
   }
 };
 
+/**
+ * Update enquiry status or message
+ * PUT /api/enquiries/:id
+ */
 export const updateEnquiry = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -187,39 +168,35 @@ export const updateEnquiry = async (req, res, next) => {
 
     try {
       const existing = await prisma.enquiry.findUnique({ where: { id } });
-      if (existing) {
-        const updated = await prisma.enquiry.update({
-          where: { id },
-          data: {
-            ...(status && { status: status.toUpperCase() }),
-            ...(message !== undefined && { message: message ? message.trim() : null })
-          }
-        });
-        return res.json({ success: true, message: 'Enquiry updated successfully', data: updated });
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Enquiry not found in database' });
       }
-    } catch (dbErr) {
-      console.error('Prisma updateEnquiry error:', dbErr.message);
-      if (process.env.DATABASE_URL) {
-        return res.status(500).json({ success: false, message: 'Failed to update enquiry in database' });
-      }
-    }
 
-    const index = fallbackStore.enquiries.findIndex(e => e.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Enquiry not found' });
+      const updated = await prisma.enquiry.update({
+        where: { id },
+        data: {
+          ...(status && { status: status.toUpperCase() }),
+          ...(message !== undefined && { message: message ? message.trim() : null })
+        }
+      });
+      return res.json({ success: true, message: 'Enquiry updated successfully', data: updated });
+    } catch (dbErr) {
+      console.error('PostgreSQL error updating enquiry in prisma.enquiry.update:', dbErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error updating enquiry in PostgreSQL.',
+        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
+      });
     }
-    fallbackStore.enquiries[index] = {
-      ...fallbackStore.enquiries[index],
-      ...(status && { status: status.toUpperCase() }),
-      ...(message !== undefined && { message: message ? message.trim() : null }),
-      updatedAt: new Date().toISOString()
-    };
-    return res.json({ success: true, message: 'Enquiry updated successfully', data: fallbackStore.enquiries[index] });
   } catch (error) {
     next(error);
   }
 };
 
+/**
+ * Delete enquiry by ID
+ * DELETE /api/enquiries/:id
+ */
 export const deleteEnquiry = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -229,23 +206,20 @@ export const deleteEnquiry = async (req, res, next) => {
 
     try {
       const existing = await prisma.enquiry.findUnique({ where: { id } });
-      if (existing) {
-        await prisma.enquiry.delete({ where: { id } });
-        return res.json({ success: true, message: 'Enquiry deleted successfully' });
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Enquiry not found in database' });
       }
-    } catch (dbErr) {
-      console.error('Prisma deleteEnquiry error:', dbErr.message);
-      if (process.env.DATABASE_URL) {
-        return res.status(500).json({ success: false, message: 'Failed to delete enquiry from database' });
-      }
-    }
 
-    const index = fallbackStore.enquiries.findIndex(e => e.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Enquiry not found' });
+      await prisma.enquiry.delete({ where: { id } });
+      return res.json({ success: true, message: 'Enquiry deleted successfully from database' });
+    } catch (dbErr) {
+      console.error('PostgreSQL error deleting enquiry in prisma.enquiry.delete:', dbErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error deleting enquiry from PostgreSQL.',
+        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
+      });
     }
-    fallbackStore.enquiries.splice(index, 1);
-    return res.json({ success: true, message: 'Enquiry deleted successfully' });
   } catch (error) {
     next(error);
   }

@@ -78,11 +78,25 @@ export default function AdminPortal({ isOpen, onClose }) {
       });
   }, [isOpen]);
 
+  const loadEnquiries = async (showError = false) => {
+    try {
+      const enqRes = await api.fetchAdminEnquiries();
+      if (enqRes && Array.isArray(enqRes.data)) {
+        setEnquiries(enqRes.data);
+      }
+    } catch (err) {
+      console.error('Failed to load enquiries from PostgreSQL:', err);
+      if (showError) {
+        alert(`Failed to load enquiries from PostgreSQL database: ${err.message}`);
+      }
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [enqRes, projData, servData, gallData, testData, faqData] = await Promise.all([
-        api.fetchAdminEnquiries().catch(() => ({ data: [] })),
+      const [, projData, servData, gallData, testData, faqData] = await Promise.all([
+        loadEnquiries(true),
         api.fetchProjects().catch(() => []),
         api.fetchServices().catch(() => []),
         api.fetchGallery().catch(() => []),
@@ -90,7 +104,6 @@ export default function AdminPortal({ isOpen, onClose }) {
         api.fetchAllFaqsAdmin().catch(() => ({ data: [] }))
       ]);
 
-      setEnquiries(enqRes?.data || []);
       setProjects(Array.isArray(projData) ? projData : []);
       setServices(Array.isArray(servData) ? servData : []);
       setGallery(Array.isArray(gallData) ? gallData : []);
@@ -107,6 +120,43 @@ export default function AdminPortal({ isOpen, onClose }) {
       setLoading(false);
     }
   };
+
+  // Keep Admin Portal synchronized in real-time with PostgreSQL
+  useEffect(() => {
+    if (!isOpen || !adminUser) return;
+
+    const handleEnquirySubmitted = () => {
+      loadEnquiries(false);
+    };
+
+    const handleStorage = (e) => {
+      if (e.key === 'tdbd_last_enquiry_time') {
+        loadEnquiries(false);
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadEnquiries(false);
+      }
+    };
+
+    // Auto-sync polling every 15 seconds to fetch new submissions from PostgreSQL
+    const intervalId = setInterval(() => {
+      loadEnquiries(false);
+    }, 15000);
+
+    window.addEventListener('tdbd_enquiry_submitted', handleEnquirySubmitted);
+    window.addEventListener('storage', handleStorage);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('tdbd_enquiry_submitted', handleEnquirySubmitted);
+      window.removeEventListener('storage', handleStorage);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isOpen, adminUser]);
 
   const handleGoogleSignIn = () => {
     setAuthLoading(true);

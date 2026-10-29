@@ -243,10 +243,21 @@ export async function fetchFaqs(category) {
 }
 
 export async function submitEnquiry(enquiryData) {
-  return await request('/enquiries', {
+  const res = await request('/enquiries', {
     method: 'POST',
     body: JSON.stringify(enquiryData)
   });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tdbd_enquiry_submitted', { detail: res?.data }));
+    try {
+      localStorage.setItem('tdbd_last_enquiry_time', Date.now().toString());
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return res;
 }
 
 // ==========================================

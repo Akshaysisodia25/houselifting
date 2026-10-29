@@ -452,7 +452,6 @@ export const fallbackStore = {
       category: 'Service Areas',
       published: true
     }
-  ],
-  enquiries: []
+  ]
 };
 
