@@ -1,12 +1,26 @@
 import express from 'express';
-import { login, getMe, logout } from '../controllers/authController.js';
+import {
+  initiateGoogleAuth,
+  handleGoogleCallback,
+  getMe,
+  logout,
+  login
+} from '../controllers/authController.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/login', login);
+// Google OAuth 2.0 with PKCE & OpenID Connect
+router.get('/google', initiateGoogleAuth);
+router.get('/google/callback', handleGoogleCallback);
+
+// Current Session & Profile
 router.get('/me', requireAuth, getMe);
+
+// Logout (Clears HttpOnly Session Cookie)
 router.post('/logout', logout);
 
-export default router;
+// Superseded Password Login (Safely returns 403 Forbidden)
+router.post('/login', login);
 
+export default router;

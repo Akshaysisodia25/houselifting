@@ -9,13 +9,11 @@ import api from '../../services/api';
 export default function AdminPortal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
-  const [token, setToken] = useState(api.getAuthToken());
   const [adminUser, setAdminUser] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState('enquiries'); // 'enquiries', 'projects', 'services', 'gallery', 'testimonials', 'faqs', 'system'
 
-  // Auth form state
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  // Auth state
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -35,23 +33,50 @@ export default function AdminPortal({ isOpen, onClose }) {
   const [addFormType, setAddFormType] = useState('project'); // 'project', 'service', 'gallery', 'testimonial', 'faq'
   const [newItem, setNewItem] = useState({});
 
-  // Verify existing token on mount
+  // Verify authentication session on mount / modal open
   useEffect(() => {
-    if (token) {
-      api.getAdminProfile()
-        .then(res => {
-          if (res?.data) {
-            setAdminUser(res.data);
-            loadAllData();
-          } else {
-            handleLogout();
-          }
-        })
-        .catch(() => {
-          handleLogout();
-        });
+    // Check for OAuth callback parameters in URL
+    const params = new URLSearchParams(window.location.search);
+    const authStatus = params.get('auth');
+    const authErrorParam = params.get('error');
+    const authEmailParam = params.get('email');
+
+    if (authErrorParam) {
+      if (authErrorParam === 'unauthorized_email') {
+        setAuthError(`Access Denied: Google account "${authEmailParam || ''}" is not authorized. Only allowlisted company administrators can access this portal.`);
+      } else if (authErrorParam === 'invalid_state') {
+        setAuthError('Authentication security verification failed (invalid OAuth state). Please try again.');
+      } else if (authErrorParam === 'missing_code_verifier') {
+        setAuthError('OAuth session expired. Please attempt Google Sign-In again.');
+      } else if (authErrorParam === 'access_denied') {
+        setAuthError('Google Sign-In was cancelled or access permissions were denied.');
+      } else {
+        setAuthError(`Authentication error: ${decodeURIComponent(authErrorParam)}`);
+      }
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } else if (authStatus === 'success') {
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
     }
-  }, [token]);
+
+    setCheckingAuth(true);
+    api.getAdminProfile()
+      .then(res => {
+        if (res?.data) {
+          setAdminUser(res.data);
+          loadAllData();
+        } else {
+          setAdminUser(null);
+        }
+      })
+      .catch(() => {
+        setAdminUser(null);
+      })
+      .finally(() => {
+        setCheckingAuth(false);
+      });
+  }, [isOpen]);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -83,30 +108,14 @@ export default function AdminPortal({ isOpen, onClose }) {
     }
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const handleGoogleSignIn = () => {
     setAuthLoading(true);
     setAuthError('');
-    try {
-      const res = await api.loginAdmin(loginEmail, loginPassword);
-      if (res?.data?.token) {
-        setToken(res.data.token);
-        setAdminUser(res.data.admin);
-        setLoginPassword('');
-        loadAllData();
-      } else {
-        setAuthError('Invalid email or password.');
-      }
-    } catch (err) {
-      setAuthError('Invalid email or password.');
-    } finally {
-      setAuthLoading(false);
-    }
+    api.loginWithGoogle();
   };
 
-  const handleLogout = () => {
-    api.logoutAdmin();
-    setToken(null);
+  const handleLogout = async () => {
+    await api.logoutAdmin();
     setAdminUser(null);
   };
 
@@ -184,12 +193,27 @@ export default function AdminPortal({ isOpen, onClose }) {
           </div>
 
           <div className="flex items-center gap-3">
-            {token && adminUser && (
+            {adminUser && (
               <div className="hidden sm:flex items-center gap-3 pr-3 border-r border-[#2A2A2A] text-xs font-mono">
-                <span className="text-[#A0A0A0]">{adminUser.email}</span>
+                {adminUser.picture ? (
+                  <img
+                    src={adminUser.picture}
+                    alt={adminUser.name || 'Admin'}
+                    className="w-6 h-6 rounded-full border border-[#333333] object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 text-brand-accent" />
+                )}
+                <div className="flex flex-col text-left">
+                  <span className="text-[#F5F5F0] font-bold text-[11px] leading-tight">
+                    {adminUser.name || 'Administrator'}
+                  </span>
+                  <span className="text-[#888888] text-[10px] leading-tight">{adminUser.email}</span>
+                </div>
                 <button
                   onClick={handleLogout}
-                  className="px-2.5 py-1 bg-[#1A1A1A] hover:bg-red-950/60 hover:text-red-400 border border-[#2A2A2A] text-[#A0A0A0] transition-colors flex items-center gap-1.5"
+                  className="px-2.5 py-1 ml-2 bg-[#1A1A1A] hover:bg-red-950/60 hover:text-red-400 border border-[#2A2A2A] text-[#A0A0A0] transition-colors flex items-center gap-1.5"
                   title="Log out"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -208,7 +232,14 @@ export default function AdminPortal({ isOpen, onClose }) {
         </div>
 
         {/* Content Area */}
-        {!token ? (
+        {checkingAuth ? (
+          <div className="p-16 text-center space-y-4 my-auto">
+            <RefreshCw className="w-8 h-8 animate-spin text-brand-accent mx-auto" />
+            <p className="text-xs font-mono text-[#888888] uppercase tracking-wider">
+              Verifying Administrator Authorization...
+            </p>
+          </div>
+        ) : !adminUser ? (
           /* Authentication Screen */
           <div className="p-8 sm:p-12 max-w-md mx-auto w-full my-auto space-y-6">
             <div className="space-y-2 text-center">
@@ -224,64 +255,62 @@ export default function AdminPortal({ isOpen, onClose }) {
             </div>
 
             {authError && (
-              <div className="p-3 bg-red-950/40 border border-red-800 text-red-200 text-xs font-mono flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="p-3.5 bg-red-950/50 border border-red-800 text-red-200 text-xs font-mono flex items-start gap-2.5 leading-relaxed">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
                 <span>{authError}</span>
               </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono uppercase tracking-wider text-[#A0A0A0]">
-                  Admin Email
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-[#666666] absolute left-3 top-3" />
-                  <input
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-[#141414] border border-[#2A2A2A] text-[#F5F5F0] text-sm focus:border-brand-accent focus:outline-none"
-                    placeholder="Enter admin email"
-                    autoComplete="username"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono uppercase tracking-wider text-[#A0A0A0]">
-                  Password
-                </label>
-                <div className="relative">
-                  <Key className="w-4 h-4 text-[#666666] absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-[#141414] border border-[#2A2A2A] text-[#F5F5F0] text-sm focus:border-brand-accent focus:outline-none"
-                    placeholder="Enter password"
-                    autoComplete="current-password"
-                  />
-                </div>
-              </div>
-
+            <div className="space-y-4 pt-2">
               <button
-                type="submit"
+                type="button"
+                onClick={handleGoogleSignIn}
                 disabled={authLoading}
-                className="w-full py-3 bg-brand-accent hover:bg-[#EA580C] text-white font-mono font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-5 bg-[#171717] hover:bg-[#202020] text-[#F5F5F0] border border-[#333333] hover:border-brand-accent transition-all duration-200 font-sans font-semibold text-sm flex items-center justify-center gap-3.5 shadow-lg group disabled:opacity-50 cursor-pointer"
               >
                 {authLoading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                    <span>Authenticating...</span>
+                    <RefreshCw className="w-4 h-4 animate-spin text-brand-accent" />
+                    <span className="font-mono text-xs uppercase tracking-wider text-[#A0A0A0]">
+                      Redirecting to Google...
+                    </span>
                   </>
                 ) : (
-                  <span>Access Dashboard →</span>
+                  <>
+                    {/* Official Google G Logo SVG */}
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span className="font-heading tracking-wide">Continue with Google</span>
+                  </>
                 )}
               </button>
-            </form>
+
+              <div className="pt-2 text-center space-y-1.5 border-t border-[#222222]">
+                <div className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-[#888888]">
+                  <ShieldCheck className="w-3.5 h-3.5 text-brand-accent" />
+                  <span>Google OpenID Connect • PKCE Secured</span>
+                </div>
+                <p className="text-[10px] font-mono text-[#666666]">
+                  Restricted to allowlisted engineering company email addresses.
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           /* Authenticated Dashboard */

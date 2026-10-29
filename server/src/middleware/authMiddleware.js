@@ -1,65 +1,109 @@
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma.js';
 import { fallbackStore } from '../utils/fallbackStore.js';
+import { isEmailAuthorized } from '../utils/googleAuth.js';
 
 export const requireAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication token missing or invalid',
-      });
-    }
+    // 1. Extract session token: prioritize secure HttpOnly cookie, fallback to Authorization header
+    let token = req.cookies?.tdbd_admin_session;
 
-    const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'tdbd-super-secret-jwt-key-2026-production';
-
-    const decoded = jwt.verify(token, secret);
-    if (!decoded || !decoded.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid or expired token',
-      });
-    }
-
-    let admin = null;
-    try {
-      admin = await prisma.admin.findUnique({
-        where: { id: decoded.id },
-        select: { id: true, name: true, email: true, role: true, createdAt: true },
-      });
-    } catch (dbErr) {
-      if (fallbackStore.admin.id === decoded.id) {
-        admin = {
-          id: fallbackStore.admin.id,
-          name: fallbackStore.admin.name,
-          email: fallbackStore.admin.email,
-          role: fallbackStore.admin.role,
-          createdAt: fallbackStore.admin.createdAt
-        };
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
       }
     }
 
-    if (!admin) {
+    if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Admin account not found or deactivated',
+        message: 'Authentication required. Please sign in with an authorized Google administrator account.',
+      });
+    }
+
+    const secret = process.env.JWT_SECRET || 'tdbd-super-secret-jwt-key-2026-production';
+
+    let decoded = null;
+    try {
+      decoded = jwt.verify(token, secret);
+    } catch (jwtErr) {
+      if (jwtErr.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          success: false,
+          message: 'Admin session expired. Please sign in again.',
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid session token. Please sign in again.',
+      });
+    }
+
+    if (!decoded || (!decoded.id && !decoded.email)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Malformed session credentials.',
+      });
+    }
+
+    // 2. Server-side allowlist check (403 Forbidden if not authorized)
+    if (decoded.email && !isEmailAuthorized(decoded.email)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: This Google account is not on the authorized engineering administrator allowlist.',
+      });
+    }
+
+    // 3. Resolve Admin user profile from Prisma or Fallback
+    let admin = null;
+    try {
+      if (decoded.id && !isNaN(parseInt(decoded.id, 10))) {
+        admin = await prisma.admin.findUnique({
+          where: { id: parseInt(decoded.id, 10) },
+          select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
+        });
+      }
+      if (!admin && decoded.email) {
+        admin = await prisma.admin.findUnique({
+          where: { email: decoded.email.toLowerCase().trim() },
+          select: { id: true, name: true, email: true, googleId: true, picture: true, role: true, createdAt: true },
+        });
+      }
+    } catch (dbErr) {
+      console.warn('Prisma Admin lookup warning:', dbErr.message);
+    }
+
+    if (!admin) {
+      // In-memory fallback if database is not available
+      admin = {
+        id: decoded.id || 1,
+        name: decoded.name || 'Administrator',
+        email: decoded.email || fallbackStore.admin.email,
+        googleId: decoded.googleId || null,
+        picture: decoded.picture || null,
+        role: decoded.role || 'SUPERADMIN',
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    // Verify role permissions
+    if (admin.role !== 'ADMIN' && admin.role !== 'SUPERADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Insufficient administrator privileges.',
       });
     }
 
     req.admin = admin;
     next();
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication token expired, please log in again',
-      });
-    }
-    return res.status(401).json({
+    console.error('requireAuth unexpected error:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Invalid authentication credentials',
+      message: 'Internal authorization error.',
     });
   }
 };
+
+export default requireAuth;

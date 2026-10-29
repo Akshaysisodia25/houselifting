@@ -68,6 +68,7 @@ async function request(endpoint, options = {}) {
 
   const config = {
     ...options,
+    credentials: 'include',
     headers
   };
 
@@ -267,6 +268,18 @@ export async function submitEnquiry(enquiryData) {
 // ADMIN AUTHENTICATION
 // ==========================================
 
+export function getGoogleLoginUrl() {
+  const baseUrl = getApiBaseUrl();
+  const returnTo = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${baseUrl}/auth/google?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+export function loginWithGoogle() {
+  if (typeof window !== 'undefined') {
+    window.location.href = getGoogleLoginUrl();
+  }
+}
+
 export async function loginAdmin(email, password) {
   const res = await request('/auth/login', {
     method: 'POST',
@@ -418,6 +431,8 @@ export async function deleteFaq(id) {
 
 export default {
   checkHealth,
+  getGoogleLoginUrl,
+  loginWithGoogle,
   fetchProjects,
   fetchProject,
   fetchServices,

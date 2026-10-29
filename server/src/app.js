@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cookieParser from './middleware/cookieParser.js';
 
 import authRoutes from './routes/authRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
@@ -64,7 +65,8 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-// Body Parsing
+// Cookie & Body Parsing
+app.use(cookieParser);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -77,7 +79,10 @@ const handleHealth = (req, res) => {
       hasAdminEmail: Boolean(process.env.ADMIN_EMAIL),
       hasAdminPassword: Boolean(process.env.ADMIN_PASSWORD),
       hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
-      hasJwtSecret: Boolean(process.env.JWT_SECRET)
+      hasJwtSecret: Boolean(process.env.JWT_SECRET),
+      hasGoogleClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
+      hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
+      hasAdminGoogleEmails: Boolean(process.env.ADMIN_GOOGLE_EMAILS)
     },
     timestamp: new Date().toISOString(),
     version: '1.0.0'
