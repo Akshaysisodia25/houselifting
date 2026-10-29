@@ -66,7 +66,7 @@ export default function Gallery() {
             // Creative editorial aspect pattern
             const isWide = idx === 0 || idx === 5 || idx === 8;
             const isTall = idx === 2 || idx === 7;
-            const imageSrc = img.src || img.url || '/images/slider_photo.jpg';
+            const imageSrc = img.imageUrl || img.src || img.url || '/images/slider_photo.jpg';
             const imageTitle = img.title || img.caption || 'Structural Lifting Field View';
 
             return (

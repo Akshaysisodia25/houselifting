@@ -55,16 +55,20 @@ export default function Services({ onOpenConsultation }) {
                     className="relative overflow-hidden cursor-pointer bg-[#141414] border border-[#2A2A2A] group-hover:border-brand-accent transition-colors aspect-[16/10] sm:aspect-[16/9]"
                   >
                     <img
-                      src={service.image}
+                      src={service.image || service.imageUrl || '/images/slider_photo.jpg'}
                       alt={service.title}
-                      onError={(e) => { e.currentTarget.src = '/images/slider_photo.jpg'; }}
+                      onError={(e) => {
+                        if (!e.currentTarget.src.endsWith('/images/slider_photo.jpg')) {
+                          e.currentTarget.src = '/images/slider_photo.jpg';
+                        }
+                      }}
                       className="w-full h-full object-cover object-center filter contrast-[1.1] brightness-[0.88] group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#080808]/80 via-transparent to-transparent"></div>
 
                     {/* Corner Tag */}
                     <div className="absolute top-4 left-4 px-3 py-1 bg-[#080808]/85 backdrop-blur-md text-[10px] font-mono uppercase tracking-wider text-[#F5F5F0] border border-[#2A2A2A]">
-                      Phase Capacity: {service.specs.capacity}
+                      Phase Capacity: {service.specs?.capacity || 'High Tonnage Hydraulic'}
                     </div>
 
                     <div className="absolute bottom-4 right-4 p-3 bg-brand-accent text-white opacity-0 group-hover:opacity-100 transition-all duration-300">
@@ -95,11 +99,11 @@ export default function Services({ onOpenConsultation }) {
                   <div className="grid grid-cols-2 gap-4 py-4 border-y border-[#2A2A2A] text-[11px] font-mono uppercase">
                     <div>
                       <span className="text-[#707070] block text-[9px]">Typical Elevation</span>
-                      <span className="text-[#F5F5F0] font-semibold">{service.specs.elevation}</span>
+                      <span className="text-[#F5F5F0] font-semibold">{service.specs?.elevation || '1.0 to 6.0+ Ft'}</span>
                     </div>
                     <div>
                       <span className="text-[#707070] block text-[9px]">Duration Range</span>
-                      <span className="text-[#F5F5F0] font-semibold">{service.specs.duration}</span>
+                      <span className="text-[#F5F5F0] font-semibold">{service.specs?.duration || '25 - 45 Days'}</span>
                     </div>
                   </div>
 

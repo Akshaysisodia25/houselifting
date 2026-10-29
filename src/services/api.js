@@ -103,28 +103,66 @@ export async function checkHealth() {
   }
 }
 
+// Normalization helpers to ensure consistent image and text properties across API and fallback datasets
+function normalizeService(s) {
+  if (!s) return s;
+  const img = s.imageUrl || s.image || '/images/slider_photo.jpg';
+  return {
+    ...s,
+    image: img,
+    imageUrl: img,
+    subtitle: s.subtitle || s.shortDescription || '',
+    shortDescription: s.shortDescription || s.subtitle || '',
+    specs: s.specs || {},
+    features: s.features || []
+  };
+}
+
+function normalizeProject(p) {
+  if (!p) return p;
+  const img = p.imageUrl || p.image || '/images/slider_photo.jpg';
+  return {
+    ...p,
+    image: img,
+    imageUrl: img,
+    specs: p.specs || {}
+  };
+}
+
+function normalizeGalleryItem(g) {
+  if (!g) return g;
+  const img = g.imageUrl || g.src || g.url || '/images/slider_photo.jpg';
+  return {
+    ...g,
+    src: img,
+    url: img,
+    imageUrl: img
+  };
+}
+
 export async function fetchProjects(params = {}) {
   try {
     const query = new URLSearchParams(params).toString();
     const res = await request(`/projects${query ? `?${query}` : ''}`);
     if (res && res.data && res.data.length > 0) {
-      return res.data;
+      return res.data.map(normalizeProject);
     }
-    return fallbackProjects;
+    return fallbackProjects.map(normalizeProject);
   } catch (err) {
     console.info('API unavailable, serving fallback projects data:', err.message);
-    return fallbackProjects;
+    return fallbackProjects.map(normalizeProject);
   }
 }
 
 export async function fetchProject(idOrSlug) {
   try {
     const res = await request(`/projects/${idOrSlug}`);
-    if (res && res.data) return res.data;
+    if (res && res.data) return normalizeProject(res.data);
   } catch (err) {
     console.info(`API unavailable for project ${idOrSlug}, using fallback:`, err.message);
   }
-  return fallbackProjects.find(p => p.id === parseInt(idOrSlug, 10) || p.slug === idOrSlug) || null;
+  const match = fallbackProjects.find(p => p.id === parseInt(idOrSlug, 10) || p.slug === idOrSlug);
+  return match ? normalizeProject(match) : null;
 }
 
 export async function fetchServices(params = {}) {
@@ -132,23 +170,24 @@ export async function fetchServices(params = {}) {
     const query = new URLSearchParams(params).toString();
     const res = await request(`/services${query ? `?${query}` : ''}`);
     if (res && res.data && res.data.length > 0) {
-      return res.data;
+      return res.data.map(normalizeService);
     }
-    return fallbackServices;
+    return fallbackServices.map(normalizeService);
   } catch (err) {
     console.info('API unavailable, serving fallback services data:', err.message);
-    return fallbackServices;
+    return fallbackServices.map(normalizeService);
   }
 }
 
 export async function fetchService(idOrSlug) {
   try {
     const res = await request(`/services/${idOrSlug}`);
-    if (res && res.data) return res.data;
+    if (res && res.data) return normalizeService(res.data);
   } catch (err) {
     console.info(`API unavailable for service ${idOrSlug}, using fallback:`, err.message);
   }
-  return fallbackServices.find(s => s.id === parseInt(idOrSlug, 10) || s.slug === idOrSlug) || null;
+  const match = fallbackServices.find(s => s.id === parseInt(idOrSlug, 10) || s.slug === idOrSlug);
+  return match ? normalizeService(match) : null;
 }
 
 export async function fetchGallery(category) {
@@ -156,16 +195,18 @@ export async function fetchGallery(category) {
     const query = category && category !== 'All' ? `?category=${encodeURIComponent(category)}` : '';
     const res = await request(`/gallery${query}`);
     if (res && res.data && res.data.length > 0) {
-      return res.data;
+      return res.data.map(normalizeGalleryItem);
     }
-    return category && category !== 'All'
+    const list = category && category !== 'All'
       ? fallbackGallery.filter(g => g.category.toLowerCase() === category.toLowerCase())
       : fallbackGallery;
+    return list.map(normalizeGalleryItem);
   } catch (err) {
     console.info('API unavailable, serving fallback gallery:', err.message);
-    return category && category !== 'All'
+    const list = category && category !== 'All'
       ? fallbackGallery.filter(g => g.category.toLowerCase() === category.toLowerCase())
       : fallbackGallery;
+    return list.map(normalizeGalleryItem);
   }
 }
 

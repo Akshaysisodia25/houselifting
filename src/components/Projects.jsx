@@ -71,9 +71,13 @@ export default function Projects({ onOpenConsultation }) {
               {/* Dominant Image Container */}
               <div className="relative overflow-hidden bg-[#141414] border border-[#2A2A2A] group-hover:border-brand-accent transition-colors aspect-[16/11]">
                 <img
-                  src={project.image}
+                  src={project.image || project.imageUrl || '/images/slider_photo.jpg'}
                   alt={project.title}
-                  onError={(e) => { e.currentTarget.src = '/images/slider_photo.jpg'; }}
+                  onError={(e) => {
+                    if (!e.currentTarget.src.endsWith('/images/slider_photo.jpg')) {
+                      e.currentTarget.src = '/images/slider_photo.jpg';
+                    }
+                  }}
                   className="w-full h-full object-cover object-center filter contrast-[1.1] brightness-[0.88] group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
                 />
                 

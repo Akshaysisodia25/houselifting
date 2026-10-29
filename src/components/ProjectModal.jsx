@@ -16,9 +16,13 @@ export default function ProjectModal({ project, onClose, onOpenConsultation }) {
         {/* Top Image Banner */}
         <div className="relative h-72 sm:h-96 w-full overflow-hidden bg-[#0A0A0A]">
           <img
-            src={project.image}
+            src={project.image || project.imageUrl || '/images/slider_photo.jpg'}
             alt={project.title}
-            onError={(e) => { e.currentTarget.src = '/images/slider_photo.jpg'; }}
+            onError={(e) => {
+              if (!e.currentTarget.src.endsWith('/images/slider_photo.jpg')) {
+                e.currentTarget.src = '/images/slider_photo.jpg';
+              }
+            }}
             className="w-full h-full object-cover object-center filter brightness-95 contrast-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/30 to-transparent"></div>

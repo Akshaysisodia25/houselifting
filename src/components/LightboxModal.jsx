@@ -6,7 +6,7 @@ export default function LightboxModal({ images, activeIndex, currentIndex, onClo
   if (index === null || index === undefined || !images || !images[index]) return null;
 
   const current = images[index];
-  const imageSrc = current.src || current.url || '/images/slider_photo.jpg';
+  const imageSrc = current.imageUrl || current.src || current.url || '/images/slider_photo.jpg';
   const imageTitle = current.title || current.caption || 'Structural Lifting Jobsite';
 
   useEffect(() => {

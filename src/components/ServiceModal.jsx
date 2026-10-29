@@ -16,9 +16,13 @@ export default function ServiceModal({ service, onClose, onOpenConsultation }) {
         {/* Header Image */}
         <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-[#0A0A0A]">
           <img
-            src={service.image}
+            src={service.image || service.imageUrl || '/images/slider_photo.jpg'}
             alt={service.title}
-            onError={(e) => { e.currentTarget.src = '/images/slider_photo.jpg'; }}
+            onError={(e) => {
+              if (!e.currentTarget.src.endsWith('/images/slider_photo.jpg')) {
+                e.currentTarget.src = '/images/slider_photo.jpg';
+              }
+            }}
             className="w-full h-full object-cover object-center filter brightness-[0.75] contrast-110"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/40 to-transparent"></div>
