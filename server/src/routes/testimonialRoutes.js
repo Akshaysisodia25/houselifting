@@ -14,7 +14,7 @@ const router = express.Router();
 router.get('/', getPublicTestimonials);
 router.get('/all', requireAuth, getAllTestimonials);
 router.get('/:id', getTestimonialById);
-router.post('/', createTestimonial);
+router.post('/', requireAuth, createTestimonial);
 router.put('/:id', requireAuth, updateTestimonial);
 router.delete('/:id', requireAuth, deleteTestimonial);
 

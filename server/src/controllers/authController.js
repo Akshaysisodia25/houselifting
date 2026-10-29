@@ -4,6 +4,7 @@ import {
   generatePkce,
   resolveRedirectUri,
   resolveFrontendUrl,
+  sanitizeReturnTo,
   getGoogleAuthorizationUrl,
   exchangeCodeForTokens,
   verifyGoogleUser,
@@ -25,7 +26,7 @@ export const initiateGoogleAuth = async (req, res, next) => {
 
     const { codeVerifier, codeChallenge, state } = generatePkce();
     const redirectUri = resolveRedirectUri(req);
-    const returnTo = req.query.returnTo || resolveFrontendUrl(req);
+    const returnTo = sanitizeReturnTo(req.query.returnTo, req);
 
     const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
     const cookieOptions = {
@@ -58,7 +59,7 @@ export const initiateGoogleAuth = async (req, res, next) => {
  * GET /api/auth/google/callback
  */
 export const handleGoogleCallback = async (req, res, next) => {
-  const returnTo = req.cookies?.oauth_return_to || resolveFrontendUrl(req);
+  const returnTo = sanitizeReturnTo(req.cookies?.oauth_return_to, req);
 
   const clearOAuthCookies = () => {
     const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
@@ -133,7 +134,7 @@ export const handleGoogleCallback = async (req, res, next) => {
         });
       }
 
-      // Redirect to Admin Portal with access_denied flag (do not leak email in URL or logs)
+      // Redirect to Admin Portal with access_denied flag (never leak email in URL or error strings)
       return res.redirect(`${returnTo}/#admin?error=unauthorized_email`);
     }
 
@@ -169,9 +170,9 @@ export const handleGoogleCallback = async (req, res, next) => {
       };
     }
 
-    // 5. Generate secure JWT session token
+    // 5. Generate secure JWT session token with Session Timeouts (8h absolute, 2h idle tracked via lastActive)
     const secret = process.env.JWT_SECRET || 'tdbd-super-secret-jwt-key-2026-production';
-    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
+    const now = Date.now();
 
     const sessionToken = jwt.sign(
       {
@@ -181,9 +182,15 @@ export const handleGoogleCallback = async (req, res, next) => {
         role: admin.role,
         googleId: admin.googleId,
         picture: admin.picture,
+        sessionStart: now,
+        lastActive: now,
       },
       secret,
-      { expiresIn }
+      {
+        expiresIn: '8h', // 8 hours absolute expiration
+        issuer: 'tdbd-engineering-works',
+        audience: 'tdbd-admin-portal',
+      }
     );
 
     // 6. Set secure HttpOnly session cookie
@@ -192,7 +199,7 @@ export const handleGoogleCallback = async (req, res, next) => {
       secure: isProd,
       sameSite: 'lax',
       path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 8 * 60 * 60 * 1000, // 8 hours absolute session limit
     });
 
     // 7. Redirect back to Admin Portal with success flag

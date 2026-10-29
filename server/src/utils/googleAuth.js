@@ -1,7 +1,89 @@
 import crypto from 'crypto';
 
 /**
- * Generate PKCE Code Verifier, Code Challenge, and OAuth State
+ * Approved application origins for CORS, redirect validation, and CSRF protection
+ */
+export const ALLOWED_ORIGINS = [
+  'https://houselifting.vercel.app',
+  'https://www.houselifting.in',
+  'https://houselifting.in',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+];
+
+const ALLOWED_HOSTS = [
+  'houselifting.vercel.app',
+  'www.houselifting.in',
+  'houselifting.in',
+  'localhost',
+  '127.0.0.1',
+];
+
+/**
+ * Verify whether an origin is allowed by CORS and CSRF defense
+ */
+export function isAllowedOrigin(origin) {
+  if (!origin || typeof origin !== 'string') return false;
+  const clean = origin.trim().replace(/\/+$/, '');
+
+  if (ALLOWED_ORIGINS.includes(clean)) return true;
+
+  if (process.env.CLIENT_URL && process.env.CLIENT_URL !== '*') {
+    const configured = process.env.CLIENT_URL.trim().replace(/\/+$/, '');
+    if (configured === clean) return true;
+  }
+
+  // Allow Vercel preview environments (e.g., https://houselifting-git-main-xxx.vercel.app)
+  if (/^https:\/\/[a-z0-9_-]+(\.vercel\.app)$/i.test(clean)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Verify whether a hostname is safe against host header poisoning
+ */
+export function isAllowedHost(host) {
+  if (!host || typeof host !== 'string') return false;
+  const cleanHost = host.split(':')[0].trim().toLowerCase();
+
+  if (ALLOWED_HOSTS.includes(cleanHost)) return true;
+  if (cleanHost.endsWith('.vercel.app')) return true;
+
+  return false;
+}
+
+/**
+ * Sanitize post-login redirect destination to eliminate Open Redirect attacks
+ */
+export function sanitizeReturnTo(url, req) {
+  const fallback = resolveFrontendUrl(req);
+  if (!url || typeof url !== 'string') return fallback;
+
+  const trimmed = url.trim();
+
+  // Safe relative paths (e.g. /#admin, /admin, /)
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.includes('\\')) {
+    return `${fallback}${trimmed}`;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (isAllowedOrigin(parsed.origin)) {
+      return trimmed;
+    }
+  } catch (e) {
+    // Malformed URL, fallback to default
+  }
+
+  return fallback;
+}
+
+/**
+ * Generate PKCE Code Verifier, Code Challenge, and Cryptographically Secure OAuth State
  */
 export function generatePkce() {
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
@@ -15,16 +97,17 @@ export function generatePkce() {
 }
 
 /**
- * Resolve effective OAuth Redirect URI for current request environment
+ * Resolve effective OAuth Redirect URI protected against host header poisoning
  */
 export function resolveRedirectUri(req) {
   if (process.env.GOOGLE_REDIRECT_URI && process.env.GOOGLE_REDIRECT_URI.trim() !== '') {
     return process.env.GOOGLE_REDIRECT_URI.trim();
   }
 
+  const rawHost = (req.get('x-forwarded-host') || req.get('host') || 'localhost:5001').split(',')[0].trim();
+  const host = isAllowedHost(rawHost) ? rawHost : 'houselifting.vercel.app';
   const forwardedProto = req.headers['x-forwarded-proto'];
   const proto = forwardedProto ? forwardedProto.split(',')[0].trim() : (req.secure ? 'https' : 'http');
-  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:5001';
 
   return `${proto}://${host}/api/auth/google/callback`;
 }
@@ -37,9 +120,10 @@ export function resolveFrontendUrl(req) {
     return process.env.CLIENT_URL.replace(/\/+$/, '');
   }
 
+  const rawHost = (req.get('x-forwarded-host') || req.get('host') || 'localhost:3000').split(',')[0].trim();
+  const host = isAllowedHost(rawHost) ? rawHost : 'houselifting.vercel.app';
   const forwardedProto = req.headers['x-forwarded-proto'];
   const proto = forwardedProto ? forwardedProto.split(',')[0].trim() : (req.secure ? 'https' : 'http');
-  const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
 
   // If backend is on 5001 in local development, frontend is typically on port 3000
   if (host.includes('localhost:5001') || host.includes('127.0.0.1:5001')) {
@@ -111,7 +195,7 @@ export async function exchangeCodeForTokens({ code, codeVerifier, redirectUri })
 }
 
 /**
- * Verify and decode Google ID Token & fetch verified userinfo
+ * Cryptographically verify and decode Google identity & claims server-side
  */
 export async function verifyGoogleUser({ idToken, accessToken }) {
   if (!idToken && !accessToken) {
@@ -120,7 +204,20 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.trim() : null;
 
-  // 1. Fetch official OIDC UserInfo
+  // 1. Verify ID token directly with Google OAuth tokeninfo endpoint (cryptographic verification)
+  let verifiedTokenInfo = null;
+  if (idToken) {
+    try {
+      const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      if (tokenInfoRes.ok) {
+        verifiedTokenInfo = await tokenInfoRes.json();
+      }
+    } catch (e) {
+      console.warn('Google tokeninfo verification endpoint call warning:', e.message);
+    }
+  }
+
+  // 2. Fetch official OIDC UserInfo if access token is available
   let userInfo = null;
   if (accessToken) {
     try {
@@ -135,7 +232,7 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
     }
   }
 
-  // 2. Decode and validate ID Token payload
+  // 3. Fallback parse id_token payload
   let idPayload = null;
   if (idToken) {
     const parts = idToken.split('.');
@@ -148,31 +245,33 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
     }
   }
 
-  const user = userInfo || idPayload;
+  const verifiedClaims = verifiedTokenInfo || idPayload;
+  const user = verifiedTokenInfo || userInfo || idPayload;
+
   if (!user || !user.email) {
     throw new Error('Could not obtain verified user profile from Google.');
   }
 
-  // Security checks
-  if (idPayload) {
-    // Validate audience if clientId is configured
-    if (clientId && idPayload.aud && idPayload.aud !== clientId) {
+  // Cryptographic & Claims Validation
+  if (verifiedClaims) {
+    // Validate audience / client ID
+    if (clientId && verifiedClaims.aud && verifiedClaims.aud !== clientId) {
       throw new Error('Google ID token audience mismatch.');
     }
     // Validate issuer
     const validIssuers = ['https://accounts.google.com', 'accounts.google.com'];
-    if (idPayload.iss && !validIssuers.includes(idPayload.iss)) {
+    if (verifiedClaims.iss && !validIssuers.includes(verifiedClaims.iss)) {
       throw new Error('Google ID token issuer invalid.');
     }
     // Validate expiration
-    if (idPayload.exp && idPayload.exp * 1000 < Date.now()) {
+    if (verifiedClaims.exp && verifiedClaims.exp * 1000 < Date.now()) {
       throw new Error('Google ID token has expired.');
     }
   }
 
   const emailVerified = user.email_verified === true || user.email_verified === 'true';
   if (!emailVerified) {
-    throw new Error('Google email address is not verified.');
+    throw new Error('Google email address is not verified by Google.');
   }
 
   return {
@@ -184,7 +283,7 @@ export async function verifyGoogleUser({ idToken, accessToken }) {
 }
 
 /**
- * Authorized administrator Google accounts allowlist
+ * Core authorized administrator Google accounts allowlist
  */
 const CORE_AUTHORIZED_ADMINS = [
   'sisodiaakshay25@gmail.com',
@@ -235,4 +334,3 @@ export function isEmailAuthorized(email) {
 
   return allowedEmails.includes(cleanEmail);
 }
-

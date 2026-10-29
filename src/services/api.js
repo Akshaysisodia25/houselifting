@@ -25,7 +25,7 @@ export function getApiBaseUrl() {
 
 const TOKEN_KEY = 'tdbd_admin_token';
 
-// Auth Token Helpers
+// Auth Token Helpers - Session relies strictly on secure HttpOnly cookies; localStorage is sanitized
 export const getAuthToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY);
@@ -36,13 +36,10 @@ export const getAuthToken = () => {
 
 export const setAuthToken = (token) => {
   try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_KEY);
-    }
+    // Deprecated for security: Clean up any legacy tokens from localStorage
+    localStorage.removeItem(TOKEN_KEY);
   } catch (e) {
-    console.warn('LocalStorage error:', e);
+    // ignore
   }
 };
 
@@ -50,7 +47,7 @@ export const removeAuthToken = () => {
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch (e) {
-    console.warn('LocalStorage error:', e);
+    // ignore
   }
 };
 
@@ -59,6 +56,7 @@ async function request(endpoint, options = {}) {
   const token = getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest', // Custom header for CSRF defense
     ...(options.headers || {})
   };
 

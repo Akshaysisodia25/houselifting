@@ -2,6 +2,10 @@ import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma.js';
 import { isEmailAuthorized } from '../utils/googleAuth.js';
 
+const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute session limit
+const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;     // 2 hours idle session limit
+const REFRESH_INTERVAL_MS = 15 * 60 * 1000;      // Refresh lastActive every 15 minutes
+
 export const requireAuth = async (req, res, next) => {
   const isProd = process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https';
   const clearSessionCookie = () => {
@@ -59,10 +63,63 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
+    const now = Date.now();
+
+    // 2. Validate Session Timeouts (8h Absolute & 2h Idle)
+    if (decoded.sessionStart && now - decoded.sessionStart > ABSOLUTE_TIMEOUT_MS) {
+      clearSessionCookie();
+      return res.status(401).json({
+        success: false,
+        message: 'Admin session expired (maximum 8-hour session lifetime reached). Please sign in again.',
+      });
+    }
+
+    if (decoded.lastActive && now - decoded.lastActive > IDLE_TIMEOUT_MS) {
+      clearSessionCookie();
+      return res.status(401).json({
+        success: false,
+        message: 'Admin session expired due to 2 hours of inactivity. Please sign in again.',
+      });
+    }
+
+    // 3. Sliding Session Activity Refresh (every 15 min if still within 8h absolute window)
+    if (decoded.lastActive && now - decoded.lastActive > REFRESH_INTERVAL_MS) {
+      const sessionStart = decoded.sessionStart || now;
+      const remainingMs = Math.max(1000, ABSOLUTE_TIMEOUT_MS - (now - sessionStart));
+      const remainingSec = Math.floor(remainingMs / 1000);
+
+      const refreshedToken = jwt.sign(
+        {
+          id: decoded.id,
+          email: decoded.email,
+          name: decoded.name,
+          role: decoded.role,
+          googleId: decoded.googleId,
+          picture: decoded.picture,
+          sessionStart,
+          lastActive: now,
+        },
+        secret,
+        {
+          expiresIn: remainingSec,
+          issuer: 'tdbd-engineering-works',
+          audience: 'tdbd-admin-portal',
+        }
+      );
+
+      res.cookie('tdbd_admin_session', refreshedToken, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: remainingMs,
+      });
+    }
+
     // Normalize email to lowercase and trim whitespace
     const normalizedEmail = decoded.email.replace(/^["']|["']$/g, '').toLowerCase().trim();
 
-    // 2. STRICT Server-side allowlist check (403 Forbidden if not authorized)
+    // 4. STRICT Server-side allowlist check (403 Forbidden if not authorized)
     if (!isEmailAuthorized(normalizedEmail)) {
       clearSessionCookie();
       return res.status(403).json({
@@ -71,7 +128,7 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
-    // 3. Resolve Admin user profile from Prisma PostgreSQL by verified email
+    // 5. Resolve Admin user profile from Prisma PostgreSQL by verified email
     let admin = null;
     try {
       admin = await prisma.admin.findUnique({
@@ -94,7 +151,7 @@ export const requireAuth = async (req, res, next) => {
       };
     }
 
-    // 4. Verify role permissions
+    // 6. Verify role permissions
     if (admin.role !== 'ADMIN' && admin.role !== 'SUPERADMIN') {
       clearSessionCookie();
       return res.status(403).json({

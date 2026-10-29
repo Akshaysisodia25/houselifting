@@ -14,55 +14,137 @@ import faqRoutes from './routes/faqRoutes.js';
 import enquiryRoutes from './routes/enquiryRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import { testDatabaseConnection } from './utils/prisma.js';
-import { getAllowedAdminEmails } from './utils/googleAuth.js';
+import { getAllowedAdminEmails, isAllowedOrigin, isAllowedHost } from './utils/googleAuth.js';
 
 const app = express();
 
-// Security Headers
-app.use(helmet());
+// Enable reverse proxy trust for accurate client IP identification on Vercel / Cloudflare
+app.set('trust proxy', 1);
 
-// Cross-Origin Resource Sharing
-const clientUrl = process.env.CLIENT_URL || '*';
-const allowedOrigins = [
-  'https://houselifting.vercel.app',
-  'https://www.houselifting.in',
-  'https://houselifting.in',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:3000'
-];
-
-if (clientUrl && clientUrl !== '*') {
-  allowedOrigins.push(clientUrl);
-}
-
+// Security Headers (Helmet CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // allow requests with no origin (like mobile apps, curl, or same-origin)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (origin.endsWith('.vercel.app')) return callback(null, true);
-      if (clientUrl === '*') return callback(null, true);
-      return callback(null, true); // Permissive for preview/staging environments
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'https:', 'https://lh3.googleusercontent.com'],
+        connectSrc: [
+          "'self'",
+          'https://houselifting.vercel.app',
+          'https://*.vercel.app',
+          'https://accounts.google.com',
+          'https://oauth2.googleapis.com'
+        ],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+      },
     },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    frameguard: { action: 'deny' },
+    noSniff: true,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   })
 );
 
-// Rate Limiting
+// Cross-Origin Resource Sharing with Strict Whitelist
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. server-to-server, curl, same-origin)
+      if (!origin) return callback(null, true);
+
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked: Origin ${origin} is not authorized`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    maxAge: 86400,
+  })
+);
+
+// CSRF Defense: Validate Origin & Referer headers on state-changing requests
+app.use((req, res, next) => {
+  const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (!isStateChanging) return next();
+
+  // Validate Origin header if present
+  const origin = req.headers.origin;
+  if (origin && !isAllowedOrigin(origin)) {
+    return res.status(403).json({
+      success: false,
+      message: 'CSRF Protection: Request origin not authorized.',
+    });
+  }
+
+  // Validate Referer header host if present
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      const refHost = new URL(referer).host;
+      if (!isAllowedHost(refHost)) {
+        return res.status(403).json({
+          success: false,
+          message: 'CSRF Protection: Request referer host not authorized.',
+        });
+      }
+    } catch (e) {
+      // Malformed referer
+      return res.status(403).json({
+        success: false,
+        message: 'CSRF Protection: Malformed referer header.',
+      });
+    }
+  }
+
+  next();
+});
+
+// Specialized Rate Limiters
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // limit each IP to 300 requests per windowMs
+  max: 300, // 300 general requests per window
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many requests from this IP, please try again after 15 minutes'
-  }
+    message: 'Too many requests from this IP, please try again after 15 minutes.',
+  },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // 30 authentication requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts from this IP, please try again after 15 minutes.',
+  },
+});
+
+const enquiryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // 10 public enquiry submissions per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many enquiry submissions from this IP. Please try again after 15 minutes.',
+  },
 });
 
 app.use('/api/', apiLimiter);
@@ -72,10 +154,11 @@ app.use(cookieParser);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health Check Endpoint with non-destructive SELECT 1 database connectivity check
+// Health Check Endpoint (Sanitized to prevent internal information leakage in production)
 const handleHealth = async (req, res) => {
   const dbHealth = await testDatabaseConnection();
   const allowedEmails = getAllowedAdminEmails();
+  const isProd = process.env.NODE_ENV === 'production';
 
   res.status(200).json({
     success: true,
@@ -89,11 +172,11 @@ const handleHealth = async (req, res) => {
       hasSsl: dbHealth.meta?.hasSsl || false,
       protocol: dbHealth.meta?.protocol || 'unknown',
       errorCode: dbHealth.errorCode || null,
-      error: dbHealth.error
+      error: isProd ? (dbHealth.connected ? null : 'Database connectivity check failed') : dbHealth.error,
     },
     adminAuth: {
       allowlistConfigured: Boolean(process.env.ADMIN_GOOGLE_EMAILS) || allowedEmails.length > 0,
-      allowedCount: allowedEmails.length
+      allowedCount: allowedEmails.length,
     },
     envStatus: {
       hasAdminEmail: Boolean(process.env.ADMIN_EMAIL),
@@ -104,10 +187,10 @@ const handleHealth = async (req, res) => {
       hasJwtSecret: Boolean(process.env.JWT_SECRET),
       hasGoogleClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
       hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
-      hasAdminGoogleEmails: Boolean(process.env.ADMIN_GOOGLE_EMAILS)
+      hasAdminGoogleEmails: Boolean(process.env.ADMIN_GOOGLE_EMAILS),
     },
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
   });
 };
 
@@ -120,13 +203,16 @@ app.get('/', (req, res) => {
     name: 'TDBD Engineering Works API',
     description: 'House Lifting & Structural Shifting Backend Service',
     health: '/api/health',
-    documentation: 'See README.md'
+    documentation: 'See README.md',
   });
 });
 
-// API Routes (mounted under both /api/... and direct /... for seamless Vercel serverless routing)
-app.use('/api/auth', authRoutes);
-app.use('/auth', authRoutes);
+// API Routes with rate limiters
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/auth', authLimiter, authRoutes);
+
+app.post('/api/enquiries', enquiryLimiter);
+app.post('/enquiries', enquiryLimiter);
 
 app.use('/api/projects', projectRoutes);
 app.use('/projects', projectRoutes);
@@ -153,4 +239,3 @@ app.use(notFound);
 app.use(errorHandler);
 
 export default app;
-

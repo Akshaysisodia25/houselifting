@@ -27,7 +27,17 @@ export const errorHandler = (err, req, res, next) => {
     statusCode = 400;
   }
 
-  // Prevent leaking stack in production
+  // CORS errors
+  if (err.message && err.message.includes('CORS')) {
+    statusCode = 403;
+    message = 'Cross-Origin Request Blocked.';
+  }
+
+  // Information Leakage Defense: generic 500 message in production
+  if (statusCode === 500 && process.env.NODE_ENV === 'production') {
+    message = 'An unexpected server error occurred. Please try again later.';
+  }
+
   const response = {
     success: false,
     message,
@@ -39,4 +49,3 @@ export const errorHandler = (err, req, res, next) => {
 
   res.status(statusCode).json(response);
 };
-

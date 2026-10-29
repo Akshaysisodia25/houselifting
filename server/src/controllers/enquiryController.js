@@ -3,35 +3,86 @@ import prisma, { ensureDatabaseTables } from '../utils/prisma.js';
 const VALID_STATUSES = ['NEW', 'CONTACTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
 /**
+ * Sanitize text input: strips HTML tags, script elements, ASCII control characters, and enforces length bounds.
+ */
+function sanitizeInput(str, maxLength = 255) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/<[^>]*>?/gm, '') // Strip HTML tags
+    .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, '') // Strip ASCII control characters
+    .trim()
+    .slice(0, maxLength);
+}
+
+/**
+ * Check for prototype pollution payload keys
+ */
+function hasPrototypePollution(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  for (const key of Object.keys(obj)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return true;
+    }
+    if (typeof obj[key] === 'object' && hasPrototypePollution(obj[key])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Create a new customer enquiry
  * POST /api/enquiries
  * Strictly persists a new independent row in PostgreSQL. Never updates or overwrites existing records.
  */
 export const createEnquiry = async (req, res, next) => {
   try {
+    // 1. Prototype pollution defense
+    if (hasPrototypePollution(req.body)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid request payload structure.',
+      });
+    }
+
     const { name, phone, email, city, service, message } = req.body;
 
     if (!name || !phone || !city || !service) {
       return res.status(400).json({
         success: false,
-        message: 'Name, phone number, city/location, and service type are required'
+        message: 'Name, phone number, city/location, and service type are required.',
       });
     }
 
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 7) {
+    // 2. Strict sanitization & length constraints
+    const cleanName = sanitizeInput(name, 100);
+    const cleanPhone = sanitizeInput(phone, 25);
+    const cleanCity = sanitizeInput(city, 100);
+    const cleanService = sanitizeInput(service, 100);
+    const cleanEmail = email ? sanitizeInput(email, 150).toLowerCase() : null;
+    const cleanMessage = message ? sanitizeInput(message, 2000) : null;
+
+    if (!cleanName || cleanName.length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide a valid phone number'
+        message: 'Please provide a valid full name (minimum 2 characters).',
       });
     }
 
-    if (email && email.trim() !== '') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid phone number (7 to 15 digits).',
+      });
+    }
+
+    if (cleanEmail) {
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+      if (!emailRegex.test(cleanEmail)) {
         return res.status(400).json({
           success: false,
-          message: 'Please provide a valid email address'
+          message: 'Please provide a valid email address.',
         });
       }
     }
@@ -41,36 +92,29 @@ export const createEnquiry = async (req, res, next) => {
     try {
       const enquiry = await prisma.enquiry.create({
         data: {
-          name: name.trim(),
-          phone: phone.trim(),
-          email: email && email.trim() ? email.trim() : null,
-          city: city.trim(),
-          service: service.trim(),
-          message: message && message.trim() ? message.trim() : null,
-          status: 'NEW'
-        }
+          name: cleanName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          city: cleanCity,
+          service: cleanService,
+          message: cleanMessage,
+          status: 'NEW',
+        },
       });
 
       return res.status(201).json({
         success: true,
         message: 'Enquiry submitted successfully. Our engineering team will contact you within 24 hours.',
-        data: enquiry
+        data: enquiry,
       });
     } catch (dbErr) {
-      console.error('PostgreSQL error creating enquiry in prisma.enquiry.create:', dbErr);
-      const safeErrMessage = (dbErr.message || 'Database error')
-        .split('\n')
-        .map(l => l.trim())
-        .filter(Boolean)
-        .slice(0, 2)
-        .join(' ')
-        .replace(/:\/\/[^@]+@/g, '://***:***@');
+      console.error('PostgreSQL error creating enquiry in prisma.enquiry.create:', dbErr.message);
 
+      const isDev = process.env.NODE_ENV === 'development';
       return res.status(500).json({
         success: false,
-        message: 'Database persistence error while recording enquiry in PostgreSQL.',
-        errorCode: dbErr.code || null,
-        detail: safeErrMessage
+        message: 'Database persistence error while recording enquiry in PostgreSQL. Please check database connection.',
+        ...(isDev && { error: dbErr.message }),
       });
     }
   } catch (error) {
@@ -79,10 +123,9 @@ export const createEnquiry = async (req, res, next) => {
 };
 
 /**
- * Get all enquiries from PostgreSQL
+ * Get all enquiries from PostgreSQL (Admin Protected)
  * GET /api/enquiries
  * Queries PostgreSQL findMany with optional status/search filters.
- * Returns empty array [] if zero records exist.
  */
 export const getEnquiries = async (req, res, next) => {
   try {
@@ -95,11 +138,12 @@ export const getEnquiries = async (req, res, next) => {
     }
 
     if (search && search.trim()) {
+      const cleanSearch = sanitizeInput(search, 100);
       where.OR = [
-        { name: { contains: search.trim(), mode: 'insensitive' } },
-        { phone: { contains: search.trim() } },
-        { city: { contains: search.trim(), mode: 'insensitive' } },
-        { service: { contains: search.trim(), mode: 'insensitive' } }
+        { name: { contains: cleanSearch, mode: 'insensitive' } },
+        { phone: { contains: cleanSearch } },
+        { city: { contains: cleanSearch, mode: 'insensitive' } },
+        { service: { contains: cleanSearch, mode: 'insensitive' } },
       ];
     }
 
@@ -108,30 +152,21 @@ export const getEnquiries = async (req, res, next) => {
     try {
       const enquiries = await prisma.enquiry.findMany({
         where,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
       });
 
       return res.json({
         success: true,
         count: enquiries.length,
-        data: enquiries
+        data: enquiries,
       });
     } catch (dbErr) {
-      console.error('PostgreSQL error fetching enquiries in prisma.enquiry.findMany:', dbErr);
-      const safeErrMessage = (dbErr.message || 'Database error')
-        .split('\n')
-        .map(l => l.trim())
-        .filter(Boolean)
-        .slice(0, 2)
-        .join(' ')
-        .replace(/:\/\/[^@]+@/g, '://***:***@');
+      console.error('PostgreSQL error fetching enquiries in prisma.enquiry.findMany:', dbErr.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Database error retrieving enquiries from PostgreSQL.',
-        errorCode: dbErr.code || null,
-        detail: safeErrMessage,
-        data: []
+        message: 'Database error retrieving enquiries from PostgreSQL. Please check database connection.',
+        data: [],
       });
     }
   } catch (error) {
@@ -140,28 +175,27 @@ export const getEnquiries = async (req, res, next) => {
 };
 
 /**
- * Get single enquiry by ID
+ * Get single enquiry by ID (Admin Protected)
  * GET /api/enquiries/:id
  */
 export const getEnquiryById = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ success: false, message: 'Invalid enquiry ID' });
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid enquiry ID.' });
     }
 
     try {
       const enquiry = await prisma.enquiry.findUnique({ where: { id } });
       if (!enquiry) {
-        return res.status(404).json({ success: false, message: 'Enquiry not found in database' });
+        return res.status(404).json({ success: false, message: 'Enquiry not found in database.' });
       }
       return res.json({ success: true, data: enquiry });
     } catch (dbErr) {
-      console.error('PostgreSQL error in getEnquiryById:', dbErr);
+      console.error('PostgreSQL error in getEnquiryById:', dbErr.message);
       return res.status(500).json({
         success: false,
         message: 'Database error retrieving enquiry from PostgreSQL.',
-        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
       });
     }
   } catch (error) {
@@ -170,44 +204,49 @@ export const getEnquiryById = async (req, res, next) => {
 };
 
 /**
- * Update enquiry status or message
+ * Update enquiry status or message (Admin Protected)
  * PUT /api/enquiries/:id
  */
 export const updateEnquiry = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ success: false, message: 'Invalid enquiry ID' });
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid enquiry ID.' });
+    }
+
+    if (hasPrototypePollution(req.body)) {
+      return res.status(400).json({ success: false, message: 'Invalid request payload structure.' });
     }
 
     const { status, message } = req.body;
     if (status && !VALID_STATUSES.includes(status.toUpperCase())) {
       return res.status(400).json({
         success: false,
-        message: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`
+        message: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`,
       });
     }
 
     try {
       const existing = await prisma.enquiry.findUnique({ where: { id } });
       if (!existing) {
-        return res.status(404).json({ success: false, message: 'Enquiry not found in database' });
+        return res.status(404).json({ success: false, message: 'Enquiry not found in database.' });
       }
+
+      const cleanMessage = message !== undefined ? sanitizeInput(message, 2000) : undefined;
 
       const updated = await prisma.enquiry.update({
         where: { id },
         data: {
           ...(status && { status: status.toUpperCase() }),
-          ...(message !== undefined && { message: message ? message.trim() : null })
-        }
+          ...(cleanMessage !== undefined && { message: cleanMessage || null }),
+        },
       });
-      return res.json({ success: true, message: 'Enquiry updated successfully', data: updated });
+      return res.json({ success: true, message: 'Enquiry updated successfully.', data: updated });
     } catch (dbErr) {
-      console.error('PostgreSQL error updating enquiry in prisma.enquiry.update:', dbErr);
+      console.error('PostgreSQL error updating enquiry in prisma.enquiry.update:', dbErr.message);
       return res.status(500).json({
         success: false,
         message: 'Database error updating enquiry in PostgreSQL.',
-        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
       });
     }
   } catch (error) {
@@ -216,30 +255,29 @@ export const updateEnquiry = async (req, res, next) => {
 };
 
 /**
- * Delete enquiry by ID
+ * Delete enquiry by ID (Admin Protected)
  * DELETE /api/enquiries/:id
  */
 export const deleteEnquiry = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
-      return res.status(400).json({ success: false, message: 'Invalid enquiry ID' });
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid enquiry ID.' });
     }
 
     try {
       const existing = await prisma.enquiry.findUnique({ where: { id } });
       if (!existing) {
-        return res.status(404).json({ success: false, message: 'Enquiry not found in database' });
+        return res.status(404).json({ success: false, message: 'Enquiry not found in database.' });
       }
 
       await prisma.enquiry.delete({ where: { id } });
-      return res.json({ success: true, message: 'Enquiry deleted successfully from database' });
+      return res.json({ success: true, message: 'Enquiry deleted successfully from database.' });
     } catch (dbErr) {
-      console.error('PostgreSQL error deleting enquiry in prisma.enquiry.delete:', dbErr);
+      console.error('PostgreSQL error deleting enquiry in prisma.enquiry.delete:', dbErr.message);
       return res.status(500).json({
         success: false,
         message: 'Database error deleting enquiry from PostgreSQL.',
-        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
       });
     }
   } catch (error) {
