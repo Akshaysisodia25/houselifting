@@ -46,6 +46,163 @@ export const prisma =
 // Always cache client on globalThis in serverless environments to prevent connection pool exhaustion
 globalForPrisma.prisma = prisma;
 
+let tablesEnsured = false;
+
+/**
+ * Safely ensure that required database tables exist in PostgreSQL.
+ * Completely idempotent and non-destructive.
+ */
+export async function ensureDatabaseTables() {
+  if (tablesEnsured) return true;
+
+  try {
+    const res = await prisma.$queryRawUnsafe(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'enquiries'
+      ) as "tableExists";
+    `);
+
+    if (res?.[0]?.tableExists) {
+      tablesEnsured = true;
+      return true;
+    }
+
+    console.info('[PRISMA] Database tables missing in PostgreSQL. Initializing schema safely...');
+
+    // 1. Enum
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        CREATE TYPE "EnquiryStatus" AS ENUM ('NEW', 'CONTACTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+
+    // 2. Admins table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "admins" (
+          "id" SERIAL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "email" TEXT UNIQUE NOT NULL,
+          "passwordHash" TEXT,
+          "googleId" TEXT UNIQUE,
+          "picture" TEXT,
+          "role" TEXT NOT NULL DEFAULT 'ADMIN',
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 3. Enquiries table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "enquiries" (
+          "id" SERIAL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "phone" TEXT NOT NULL,
+          "email" TEXT,
+          "city" TEXT NOT NULL,
+          "service" TEXT NOT NULL,
+          "message" TEXT,
+          "status" "EnquiryStatus" NOT NULL DEFAULT 'NEW',
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 4. Projects table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "projects" (
+          "id" SERIAL PRIMARY KEY,
+          "title" TEXT NOT NULL,
+          "slug" TEXT UNIQUE NOT NULL,
+          "location" TEXT NOT NULL,
+          "description" TEXT NOT NULL,
+          "category" TEXT NOT NULL,
+          "imageUrl" TEXT NOT NULL,
+          "beforeImageUrl" TEXT,
+          "afterImageUrl" TEXT,
+          "featured" BOOLEAN NOT NULL DEFAULT false,
+          "liftHeight" TEXT,
+          "problem" TEXT,
+          "solution" TEXT,
+          "specs" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 5. Services table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "services" (
+          "id" SERIAL PRIMARY KEY,
+          "title" TEXT NOT NULL,
+          "slug" TEXT UNIQUE NOT NULL,
+          "shortDescription" TEXT NOT NULL,
+          "description" TEXT NOT NULL,
+          "imageUrl" TEXT NOT NULL,
+          "icon" TEXT,
+          "featured" BOOLEAN NOT NULL DEFAULT false,
+          "specs" JSONB,
+          "features" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 6. Gallery images table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "gallery_images" (
+          "id" SERIAL PRIMARY KEY,
+          "title" TEXT NOT NULL,
+          "imageUrl" TEXT NOT NULL,
+          "category" TEXT NOT NULL,
+          "description" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 7. Testimonials table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "testimonials" (
+          "id" SERIAL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "location" TEXT NOT NULL,
+          "content" TEXT NOT NULL,
+          "rating" INTEGER NOT NULL DEFAULT 5,
+          "imageUrl" TEXT,
+          "approved" BOOLEAN NOT NULL DEFAULT true,
+          "outcome" TEXT,
+          "projectType" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 8. FAQs table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "faqs" (
+          "id" SERIAL PRIMARY KEY,
+          "question" TEXT NOT NULL,
+          "answer" TEXT NOT NULL,
+          "category" TEXT NOT NULL DEFAULT 'General',
+          "published" BOOLEAN NOT NULL DEFAULT true,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    tablesEnsured = true;
+    console.info('[PRISMA] Database schema verified and active.');
+    return true;
+  } catch (err) {
+    console.error('[PRISMA] Error verifying database tables:', err.message);
+    return false;
+  }
+}
+
 /**
  * Return safe, non-sensitive metadata about the current database configuration
  */
@@ -119,6 +276,8 @@ export async function testDatabaseConnection() {
 
   try {
     await prisma.$queryRawUnsafe('SELECT 1');
+    await ensureDatabaseTables();
+
     return {
       connected: true,
       configured: true,

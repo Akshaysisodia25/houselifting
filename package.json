@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "prisma generate && vite build",
+    "build": "prisma generate && (prisma migrate deploy --schema=server/prisma/schema.prisma || true) && vite build",
     "preview": "vite preview",
     "server": "cd server && npm start",
     "server:dev": "cd server && npm run dev",

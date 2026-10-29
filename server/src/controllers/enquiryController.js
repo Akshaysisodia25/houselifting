@@ -1,4 +1,4 @@
-import prisma from '../utils/prisma.js';
+import prisma, { ensureDatabaseTables } from '../utils/prisma.js';
 
 const VALID_STATUSES = ['NEW', 'CONTACTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
@@ -36,6 +36,8 @@ export const createEnquiry = async (req, res, next) => {
       }
     }
 
+    await ensureDatabaseTables();
+
     try {
       const enquiry = await prisma.enquiry.create({
         data: {
@@ -56,10 +58,19 @@ export const createEnquiry = async (req, res, next) => {
       });
     } catch (dbErr) {
       console.error('PostgreSQL error creating enquiry in prisma.enquiry.create:', dbErr);
+      const safeErrMessage = (dbErr.message || 'Database error')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' ')
+        .replace(/:\/\/[^@]+@/g, '://***:***@');
+
       return res.status(500).json({
         success: false,
-        message: 'Database persistence error while recording enquiry in PostgreSQL. Please check database connection.',
-        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
+        message: 'Database persistence error while recording enquiry in PostgreSQL.',
+        errorCode: dbErr.code || null,
+        detail: safeErrMessage
       });
     }
   } catch (error) {
@@ -92,6 +103,8 @@ export const getEnquiries = async (req, res, next) => {
       ];
     }
 
+    await ensureDatabaseTables();
+
     try {
       const enquiries = await prisma.enquiry.findMany({
         where,
@@ -105,11 +118,20 @@ export const getEnquiries = async (req, res, next) => {
       });
     } catch (dbErr) {
       console.error('PostgreSQL error fetching enquiries in prisma.enquiry.findMany:', dbErr);
+      const safeErrMessage = (dbErr.message || 'Database error')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' ')
+        .replace(/:\/\/[^@]+@/g, '://***:***@');
+
       return res.status(500).json({
         success: false,
-        message: 'Database error retrieving enquiries from PostgreSQL. Please check database connection.',
-        data: [],
-        error: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
+        message: 'Database error retrieving enquiries from PostgreSQL.',
+        errorCode: dbErr.code || null,
+        detail: safeErrMessage,
+        data: []
       });
     }
   } catch (error) {
