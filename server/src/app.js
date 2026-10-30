@@ -117,9 +117,11 @@ app.use((req, res, next) => {
 // Specialized Rate Limiters
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // 300 general requests per window
+  max: 30, // Global API limit: 30 requests per 15-minute window
+  statusCode: 429,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.originalUrl?.includes('/auth'), // Keep auth rate limiting strictly separate
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes.',
@@ -127,13 +129,14 @@ const apiLimiter = rateLimit({
 });
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5, // Tightened: max 5 authentication requests per 15 minutes per IP
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Stricter auth limit: max 5 requests per 15-minute window
+  statusCode: 429,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many auth attempts. Try again in 15 minutes.',
+    message: 'Too many authentication attempts from this IP. Please try again in 15 minutes.',
   },
 });
 
