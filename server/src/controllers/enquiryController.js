@@ -31,6 +31,39 @@ function hasPrototypePollution(obj) {
 }
 
 /**
+ * Verify Cloudflare Turnstile token
+ */
+async function verifyTurnstileToken(token, clientIp) {
+  // Cloudflare official testing secret key passes automatically if no custom key is provided
+  const secretKey = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
+
+  if (!token || typeof token !== 'string' || token.trim() === '') {
+    return { success: false, error: 'missing_token' };
+  }
+
+  try {
+    const formData = new URLSearchParams();
+    formData.append('secret', secretKey);
+    formData.append('response', token.trim());
+    if (clientIp) formData.append('remoteip', clientIp);
+
+    const cfRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
+
+    const data = await cfRes.json();
+    return { success: data.success === true, data };
+  } catch (err) {
+    console.error('[TURNSTILE] Verification network error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Create a new customer enquiry
  * POST /api/enquiries
  * Strictly persists a new independent row in PostgreSQL. Never updates or overwrites existing records.
@@ -42,6 +75,18 @@ export const createEnquiry = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid request payload structure.',
+      });
+    }
+
+    // 2. Cloudflare Turnstile CAPTCHA verification
+    const turnstileToken = req.body.turnstileToken || req.body['cf-turnstile-response'];
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip;
+
+    const captchaResult = await verifyTurnstileToken(turnstileToken, clientIp);
+    if (!captchaResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Security check failed: Invalid or missing CAPTCHA. Please complete the verification.',
       });
     }
 

@@ -15,6 +15,7 @@ export const requireAuth = async (req, res, next) => {
       sameSite: 'lax',
       path: '/',
     });
+    res.clearCookie('tdbd_has_session', { path: '/' });
   };
 
   try {

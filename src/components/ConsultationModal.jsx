@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check, ArrowRight, Loader2 } from 'lucide-react';
 import { companyInfo } from '../data/companyData';
 import { submitEnquiry } from '../services/api';
+import TurnstileWidget from './TurnstileWidget';
 
 export default function ConsultationModal({ isOpen, onClose, initialData }) {
   if (!isOpen) return null;
@@ -19,6 +20,7 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   useEffect(() => {
     if (initialData) {
@@ -35,6 +37,10 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
     if (!formData.name.trim() || !formData.phone.trim() || !formData.location.trim()) {
       return;
     }
+    if (!turnstileToken) {
+      setErrorMsg('Please complete the security verification challenge.');
+      return;
+    }
     setSubmitting(true);
     setErrorMsg('');
     try {
@@ -44,7 +50,8 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
         email: formData.email,
         city: formData.location,
         service: formData.serviceType,
-        message: formData.message
+        message: formData.message,
+        turnstileToken
       });
       setSubmitted(true);
     } catch (err) {
@@ -194,9 +201,18 @@ export default function ConsultationModal({ isOpen, onClose, initialData }) {
               ></textarea>
             </div>
 
+            <TurnstileWidget
+              onVerify={(t) => {
+                setTurnstileToken(t);
+                setErrorMsg('');
+              }}
+              onExpire={() => setTurnstileToken('')}
+              onError={() => setErrorMsg('CAPTCHA verification failed. Please try again.')}
+            />
+
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !turnstileToken}
               className="w-full py-3.5 bg-brand-accent text-white font-mono font-bold text-xs uppercase tracking-wider hover:bg-[#EA580C] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {submitting ? (

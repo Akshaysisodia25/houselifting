@@ -39,6 +39,15 @@ export default function AdminPortal({ isOpen, onClose }) {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     const authErrorParam = params.get('error');
+    const isExplicitAdminRoute = window.location.hash === '#admin';
+    const hasOAuthParams = Boolean(authStatus || authErrorParam);
+    const hasAdminCookie = typeof document !== 'undefined' && document.cookie.includes('tdbd_has_session=1');
+
+    // Optimization: Do NOT trigger /api/auth/me requests for normal public visitors browsing the website!
+    if (!isOpen && !isExplicitAdminRoute && !hasOAuthParams && !hasAdminCookie) {
+      setCheckingAuth(false);
+      return;
+    }
 
     if (authErrorParam) {
       if (authErrorParam === 'unauthorized_email' || authErrorParam === 'access_denied') {
@@ -53,9 +62,8 @@ export default function AdminPortal({ isOpen, onClose }) {
         setAuthError(`Authentication error: ${decodeURIComponent(authErrorParam)}`);
       }
 
-      // CRITICAL: Explicitly clear any existing admin session state and stored tokens
+      // CRITICAL: Explicitly clear any existing admin session state
       setAdminUser(null);
-      api.removeAuthToken();
       setCheckingAuth(false);
 
       const cleanUrl = window.location.pathname + window.location.hash;
@@ -74,12 +82,10 @@ export default function AdminPortal({ isOpen, onClose }) {
           loadAllData();
         } else {
           setAdminUser(null);
-          api.removeAuthToken();
         }
       })
       .catch((err) => {
         setAdminUser(null);
-        api.removeAuthToken();
         if (err.status === 403) {
           setAuthError('Access Denied: Your Google account is not on the authorized engineering administrator allowlist.');
         }
@@ -172,7 +178,6 @@ export default function AdminPortal({ isOpen, onClose }) {
   const handleGoogleSignIn = () => {
     setAuthLoading(true);
     setAuthError('');
-    api.removeAuthToken();
     api.loginWithGoogle();
   };
 

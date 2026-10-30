@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Phone, Mail, MapPin, MessageCircle, ArrowRight, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { companyInfo } from '../data/companyData';
 import { submitEnquiry } from '../services/api';
+import TurnstileWidget from './TurnstileWidget';
 
 export default function Contact({ initialData }) {
   const [formData, setFormData] = useState({
@@ -18,6 +19,7 @@ export default function Contact({ initialData }) {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -30,6 +32,10 @@ export default function Contact({ initialData }) {
       setErrorMsg('Please enter your Name, Phone Number, and Property Location.');
       return;
     }
+    if (!turnstileToken) {
+      setErrorMsg('Please complete the security verification challenge.');
+      return;
+    }
     setSubmitting(true);
     setErrorMsg('');
     try {
@@ -39,7 +45,8 @@ export default function Contact({ initialData }) {
         email: formData.email,
         city: formData.location,
         service: formData.serviceType,
-        message: formData.message
+        message: formData.message,
+        turnstileToken
       });
       setFormSubmitted(true);
     } catch (err) {
@@ -292,10 +299,19 @@ export default function Contact({ initialData }) {
                   ></textarea>
                 </div>
 
+                <TurnstileWidget
+                  onVerify={(t) => {
+                    setTurnstileToken(t);
+                    setErrorMsg('');
+                  }}
+                  onExpire={() => setTurnstileToken('')}
+                  onError={() => setErrorMsg('CAPTCHA verification failed. Please try again.')}
+                />
+
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="w-full py-4 bg-brand-accent text-white font-mono font-bold text-xs uppercase tracking-wider hover:bg-[#EA580C] transition-colors flex items-center justify-center gap-2"
+                  disabled={submitting || !turnstileToken}
+                  className="w-full py-4 bg-brand-accent text-white font-mono font-bold text-xs uppercase tracking-wider hover:bg-[#EA580C] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {submitting ? (
                     <span>Registering Site Details...</span>

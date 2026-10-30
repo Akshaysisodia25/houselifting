@@ -27,7 +27,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", 'https://challenges.cloudflare.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'data:', 'https:', 'https://lh3.googleusercontent.com'],
@@ -35,10 +35,11 @@ app.use(
           "'self'",
           'https://houselifting.vercel.app',
           'https://*.vercel.app',
+          'https://challenges.cloudflare.com',
           'https://accounts.google.com',
           'https://oauth2.googleapis.com'
         ],
-        frameSrc: ["'none'"],
+        frameSrc: ["'self'", 'https://challenges.cloudflare.com'],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
       },
@@ -127,12 +128,12 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // 30 authentication requests per 15 minutes
+  max: 5, // Tightened: max 5 authentication requests per 15 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many authentication attempts from this IP, please try again after 15 minutes.',
+    message: 'Too many auth attempts. Try again in 15 minutes.',
   },
 });
 

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://houselifting.vercel.app/sitemap.xml
+Sitemap: https://www.houselifting.in/sitemap.xml

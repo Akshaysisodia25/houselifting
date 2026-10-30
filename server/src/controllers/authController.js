@@ -126,6 +126,7 @@ export const handleGoogleCallback = async (req, res, next) => {
         sameSite: 'lax',
         path: '/',
       });
+      res.clearCookie('tdbd_has_session', { path: '/' });
 
       // If client requests JSON or direct API verification
       if (req.headers.accept?.includes('application/json')) {
@@ -203,6 +204,15 @@ export const handleGoogleCallback = async (req, res, next) => {
       maxAge: 8 * 60 * 60 * 1000, // 8 hours absolute session limit
     });
 
+    // Companion non-HttpOnly cookie for client session indicator
+    res.cookie('tdbd_has_session', '1', {
+      httpOnly: false,
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 8 * 60 * 60 * 1000,
+    });
+
     // 7. Redirect back to Admin Portal with success flag
     return res.redirect(`${returnTo}/#admin?auth=success`);
   } catch (error) {
@@ -215,6 +225,7 @@ export const handleGoogleCallback = async (req, res, next) => {
       sameSite: 'lax',
       path: '/',
     });
+    res.clearCookie('tdbd_has_session', { path: '/' });
     const errParam = error.message?.includes('JWT_SECRET')
       ? 'server_configuration_error'
       : encodeURIComponent(error.message || 'authentication_failed');
@@ -250,6 +261,7 @@ export const logout = async (req, res, next) => {
       sameSite: 'lax',
       path: '/',
     });
+    res.clearCookie('tdbd_has_session', { path: '/' });
 
     res.status(200).json({
       success: true,

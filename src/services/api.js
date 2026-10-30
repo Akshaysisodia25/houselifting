@@ -6,68 +6,22 @@ import {
   faqs as fallbackFaqs
 } from '../data/companyData';
 
-const rawApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api';
 
 export function getApiBaseUrl() {
-  if (rawApiUrl) return rawApiUrl.replace(/\/+$/, '');
-  
-  if (typeof window !== 'undefined') {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    // When running locally from Mac browser, connect to local backend on port 5001
-    if (isLocalhost) {
-      return 'http://localhost:5001/api';
-    }
-  }
-  
-  // When running on production deployments (Vercel, custom domain, mobile), use same-origin /api
-  return '/api';
+  return API_BASE.replace(/\/+$/, '');
 }
 
-const TOKEN_KEY = 'tdbd_admin_token';
-
-// Auth Token Helpers - Session relies strictly on secure HttpOnly cookies; localStorage is sanitized
-export const getAuthToken = () => {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch (e) {
-    return null;
-  }
-};
-
-export const setAuthToken = (token) => {
-  try {
-    // Deprecated for security: Clean up any legacy tokens from localStorage
-    localStorage.removeItem(TOKEN_KEY);
-  } catch (e) {
-    // ignore
-  }
-};
-
-export const removeAuthToken = () => {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch (e) {
-    // ignore
-  }
-};
-
-// Generic Fetch Wrapper
+// Generic Fetch Wrapper (Relies strictly on secure HttpOnly cookies; zero localStorage tokens)
 async function request(endpoint, options = {}) {
-  const token = getAuthToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest', // Custom header for CSRF defense
-    ...(options.headers || {})
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const config = {
     ...options,
     credentials: 'include',
-    headers
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest', // Custom header for CSRF defense
+      ...(options.headers || {})
+    }
   };
 
   try {
@@ -270,25 +224,26 @@ export function getGoogleLoginUrl() {
 
 export function loginWithGoogle() {
   if (typeof window !== 'undefined') {
-    removeAuthToken();
     window.location.href = getGoogleLoginUrl();
   }
 }
 
 export async function loginAdmin(email, password) {
-  const res = await request('/auth/login', {
+  return await request('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password })
   });
-
-  if (res && res.data && res.data.token) {
-    setAuthToken(res.data.token);
-  }
-  return res;
 }
 
 export async function getAdminProfile() {
-  return await request('/auth/me');
+  try {
+    return await request('/auth/me');
+  } catch (err) {
+    if (err.status === 401) {
+      return { success: false, data: null };
+    }
+    throw err;
+  }
 }
 
 export async function logoutAdmin() {
@@ -296,8 +251,6 @@ export async function logoutAdmin() {
     await request('/auth/logout', { method: 'POST' });
   } catch (e) {
     // ignore
-  } finally {
-    removeAuthToken();
   }
 }
 
@@ -439,9 +392,6 @@ export default {
   loginAdmin,
   getAdminProfile,
   logoutAdmin,
-  getAuthToken,
-  setAuthToken,
-  removeAuthToken,
   fetchAdminEnquiries,
   updateEnquiryStatus,
   deleteEnquiry,
