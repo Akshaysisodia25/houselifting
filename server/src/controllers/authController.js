@@ -8,7 +8,8 @@ import {
   getGoogleAuthorizationUrl,
   exchangeCodeForTokens,
   verifyGoogleUser,
-  isEmailAuthorized
+  isEmailAuthorized,
+  getJwtSecret
 } from '../utils/googleAuth.js';
 
 /**
@@ -171,7 +172,7 @@ export const handleGoogleCallback = async (req, res, next) => {
     }
 
     // 5. Generate secure JWT session token with Session Timeouts (8h absolute, 2h idle tracked via lastActive)
-    const secret = process.env.JWT_SECRET || 'tdbd-super-secret-jwt-key-2026-production';
+    const secret = getJwtSecret();
     const now = Date.now();
 
     const sessionToken = jwt.sign(
@@ -214,7 +215,10 @@ export const handleGoogleCallback = async (req, res, next) => {
       sameSite: 'lax',
       path: '/',
     });
-    return res.redirect(`${returnTo}/#admin?error=${encodeURIComponent(error.message || 'authentication_failed')}`);
+    const errParam = error.message?.includes('JWT_SECRET')
+      ? 'server_configuration_error'
+      : encodeURIComponent(error.message || 'authentication_failed');
+    return res.redirect(`${returnTo}/#admin?error=${errParam}`);
   }
 };
 

@@ -47,6 +47,8 @@ export default function AdminPortal({ isOpen, onClose }) {
         setAuthError('Authentication security verification failed (invalid OAuth state). Please try again.');
       } else if (authErrorParam === 'missing_code_verifier') {
         setAuthError('OAuth session expired. Please attempt Google Sign-In again.');
+      } else if (authErrorParam === 'server_configuration_error') {
+        setAuthError('Server Configuration Error: JWT_SECRET environment variable is not configured in Vercel. Please add JWT_SECRET to your Vercel Project Environment Variables.');
       } else {
         setAuthError(`Authentication error: ${decodeURIComponent(authErrorParam)}`);
       }

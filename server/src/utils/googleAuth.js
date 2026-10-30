@@ -334,3 +334,23 @@ export function isEmailAuthorized(email) {
 
   return allowedEmails.includes(cleanEmail);
 }
+
+/**
+ * Safely retrieve the JWT signing secret.
+ * In production, an explicit JWT_SECRET environment variable is strictly required.
+ * Fails safely rather than using a predictable/hardcoded fallback.
+ */
+export function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (secret && typeof secret === 'string' && secret.trim() !== '') {
+    return secret.trim();
+  }
+
+  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  if (isProd) {
+    throw new Error('JWT_SECRET environment variable is required in production.');
+  }
+
+  // Convenient fallback for local development only
+  return 'local-dev-jwt-secret-do-not-use-in-production';
+}

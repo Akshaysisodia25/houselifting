@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma.js';
-import { isEmailAuthorized } from '../utils/googleAuth.js';
+import { isEmailAuthorized, getJwtSecret } from '../utils/googleAuth.js';
 
 const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute session limit
 const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;     // 2 hours idle session limit
@@ -35,7 +35,16 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
-    const secret = process.env.JWT_SECRET || 'tdbd-super-secret-jwt-key-2026-production';
+    let secret;
+    try {
+      secret = getJwtSecret();
+    } catch (secErr) {
+      clearSessionCookie();
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error: Authentication secret is not configured in server environment.',
+      });
+    }
 
     let decoded = null;
     try {
