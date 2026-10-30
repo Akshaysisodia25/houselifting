@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import cookieParser from './middleware/cookieParser.js';
 
 import authRoutes from './routes/authRoutes.js';
@@ -114,45 +113,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Specialized Rate Limiters
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Global API limit: 30 requests per 15-minute window
-  statusCode: 429,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => req.originalUrl?.includes('/auth'), // Keep auth rate limiting strictly separate
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again after 15 minutes.',
-  },
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Stricter auth limit: max 5 requests per 15-minute window
-  statusCode: 429,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'Too many authentication attempts from this IP. Please try again in 15 minutes.',
-  },
-});
-
-const enquiryLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // 10 public enquiry submissions per 15 minutes
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'Too many enquiry submissions from this IP. Please try again after 15 minutes.',
-  },
-});
-
-app.use('/api/', apiLimiter);
-
 // Cookie & Body Parsing
 app.use(cookieParser);
 app.use(express.json({ limit: '10mb' }));
@@ -211,12 +171,9 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes with rate limiters
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/auth', authLimiter, authRoutes);
-
-app.post('/api/enquiries', enquiryLimiter);
-app.post('/enquiries', enquiryLimiter);
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 
 app.use('/api/projects', projectRoutes);
 app.use('/projects', projectRoutes);
